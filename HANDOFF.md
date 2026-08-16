@@ -8,6 +8,8 @@
 - 可见性：Public
 - 默认分支：`main`
 - 当前发布：`v1.1.2`
+- 发布源码提交：`46b5260d7755bd34a78e2fceb4b46571f8d1fc92`
+- GitHub Release：`https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.1.2`
 - 主镜像：`ghcr.io/codeaix/microbio-lab-app:v1.1.2`
 - Builder 镜像：`ghcr.io/codeaix/microbio-lab-builder:v1.1.2`
 - 镜像架构：`linux/amd64`、`linux/arm64`
@@ -15,6 +17,17 @@
 - Node.js：24+
 - PostgreSQL：17
 - 生产部署：Docker Compose + Cloudflare Tunnel，无宿主机反向代理
+
+v1.1.2 已验证的发布状态：
+
+```text
+main CI：    https://github.com/CodeAIX/MicroBioLab/actions/runs/31952285126（success）
+Release CI： https://github.com/CodeAIX/MicroBioLab/actions/runs/31952425584（success）
+App index：  sha256:f3f37ff17e0cca95dcc4528be2639b558f1f7e61783ffbcf97006256c54835da
+Builder：    sha256:68b3ac23732c797ac9512e27ff9c87f8bcac9d9e5337a9159d38dfe737f26333
+```
+
+两个镜像均已用匿名 Registry 请求验证为 HTTP 200，且 manifest 同时包含 `linux/amd64` 和 `linux/arm64`。Release 不是 draft/prerelease。
 
 业务域名：
 
@@ -47,7 +60,7 @@ OpenSSL 3.0.13
 数据目录：/srv/microbio-lab
 ```
 
-最后一次已知健康检查中四个服务均正常。不能假设 VPS 已经升级到当前版本；新会话应先让用户执行：
+最后一次已知健康检查中四个服务均正常。截至 v1.1.2 发布完成，用户尚未提供 VPS 升级到 v1.1.2 后的输出，因此不能假设生产环境已经升级；新会话应先让用户执行：
 
 ```bash
 cd /opt/microbio-lab
@@ -88,6 +101,8 @@ VPS 曾对 `compose.yaml` 的 Nginx tmpfs 权限做过本地修正；该修正�
 - 实验站根路径首页。
 
 `https://microbioexp.aixico.com/` 返回 Nginx 404 是设计行为，不是故障。
+
+上传限制的唯一共享数值定义在 `packages/shared/src/index.ts`：`JSX_MAX_UPLOAD_BYTES` 为 10 MiB，`COVER_MAX_UPLOAD_BYTES` 为 2 MiB。浏览器预检、Fastify multipart 入口和服务端存储校验必须同步使用这些常量；multipart 入口按较大的 JSX 上限接收，`saveCover` 必须继续对封面执行独立二次校验。
 
 ## 4. 代码与数据地图
 
@@ -217,14 +232,16 @@ GitHub CI 成功标准：
 2. 本地执行全部非 Docker 检查；
 3. 提交并推送 `main`；
 4. 等待 `main` CI 全绿；
-5. 创建 annotated tag，例如 `git tag -a v1.1.2 -m "MicroBio Lab v1.1.2"`；
+5. 使用新的版本号创建 annotated tag，例如 `NEXT_VERSION="v1.1.3"` 后执行 `git tag -a "$NEXT_VERSION" -m "MicroBio Lab $NEXT_VERSION"`；
 6. 推送标签，等待 Release 工作流；
 7. 验证 GitHub Release 不是 draft/prerelease；
 8. 使用未登录请求验证两个 GHCR manifest 返回 HTTP 200；
 9. 确认 manifest 同时包含 `amd64`、`arm64`；
 10. 再给用户生产升级命令。
 
-不要移动或覆盖已经发布的 tag，也不要静默替换 Release 资产。修正文档或脚本应发布新的 patch 版本。
+不要移动或覆盖已经发布的 tag，也不要静默替换 Release 资产。影响部署、运行命令或 Release 分发内容的文档/脚本修正应发布新的 patch 版本；仅记录既有发布结果的维护元数据可以只提交到 `main`，但不得回写旧 Release。
+
+v1.1.2 Release 资产 `microbio-lab-v1.1.2.tar.gz` 的 SHA256 为 `be35549fee79151c57a7fe0b6c9f6f3c09f6b77461deadcde5e774bdcb4e59e0`。该值只用于验证既有不可变资产；后续 `main` 上的文档更新不会回写或替换 v1.1.2 Release。
 
 ## 10. 运维原则
 
