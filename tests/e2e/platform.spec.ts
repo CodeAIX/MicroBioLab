@@ -23,7 +23,8 @@ test("administrator can log in and preview the immutable version", async ({ page
   await expect(page.getByRole("heading", { name: "控制台" })).toBeVisible();
   await page.getByRole("link", { name: "▤ 实验管理", exact: true }).click();
   await page.getByRole("row").filter({ hasText: "肠道杆菌的分离培养与生化鉴定" }).getByRole("link", { name: "管理 →", exact: true }).click();
-  await expect(page.getByText("v000001", { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/admin\/experiments\/[0-9a-f-]+$/);
+  await expect(page.locator(".version-list").getByText("v000001", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "预览", exact: true }).click();
   const frame = page.frameLocator('iframe[title="管理员预览"]');
   await expect(frame.getByText("肠道杆菌的分离培养与生化鉴定").first()).toBeVisible();
@@ -56,7 +57,7 @@ test("administrator can save teaching order and permanently delete an archived e
   await page.getByRole("button", { name: "登录" }).click();
   await page.getByRole("link", { name: "▤ 实验管理", exact: true }).click();
 
-  await page.getByRole("button", { name: "下移 教学顺序演示实验" }).click();
+  await page.getByTitle("下移 教学顺序演示实验").click();
   await page.getByRole("button", { name: "保存教学顺序" }).click();
   await expect(page.getByRole("button", { name: "保存教学顺序" })).toBeDisabled();
 
