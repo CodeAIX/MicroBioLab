@@ -10,7 +10,7 @@ test("published sample opens inside the sandboxed experiment frame", async ({ pa
   await expect(frame.getByText("虚拟仿真实验").first()).toBeVisible();
 });
 
-test("administrator can log in and see the immutable version", async ({ page }) => {
+test("administrator can log in and preview the immutable version", async ({ page }) => {
   await page.goto("/login");
   await page.getByLabel("邮箱").fill("admin@example.com");
   await page.getByLabel("密码").fill("IntegrationTest-Password-2026");
@@ -19,4 +19,7 @@ test("administrator can log in and see the immutable version", async ({ page }) 
   await page.getByRole("link", { name: "▤ 实验管理", exact: true }).click();
   await page.getByRole("link", { name: "管理 →", exact: true }).click();
   await expect(page.getByText("v000001", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "预览", exact: true }).click();
+  const frame = page.frameLocator('iframe[title="管理员预览"]');
+  await expect(frame.getByText("肠道杆菌的分离培养与生化鉴定").first()).toBeVisible();
 });

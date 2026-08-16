@@ -19,10 +19,10 @@ export async function buildApp() {
   await app.register(multipart, { limits: { files: 2, fileSize: 2 * 1024 * 1024, fields: 10, parts: 12 } });
   app.addHook("onRequest", loadUser);
   app.addHook("preHandler", originGuard);
-  app.addHook("onSend", async (_request, reply, payload) => {
+  app.addHook("onSend", async (request, reply, payload) => {
     reply.header("X-Content-Type-Options", "nosniff");
     reply.header("Referrer-Policy", "no-referrer");
-    reply.header("X-Frame-Options", "DENY");
+    reply.header("X-Frame-Options", request.url.startsWith("/preview/") ? "SAMEORIGIN" : "DENY");
     reply.header("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
     return payload;
   });

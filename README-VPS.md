@@ -48,7 +48,7 @@ docker compose version
 
 ```bash
 sudo install -d -o "$(id -u)" -g "$(id -g)" /opt/microbio-lab
-git clone --branch v1.0.1 --depth 1 \
+git clone --branch v1.0.2 --depth 1 \
   https://github.com/CodeAIX/MicroBioLab.git \
   /opt/microbio-lab
 cd /opt/microbio-lab
@@ -69,7 +69,7 @@ cp .env.example .env
 chmod 600 .env
 sed -i \
   -e 's|^GHCR_OWNER=.*|GHCR_OWNER=codeaix|' \
-  -e 's|^PLATFORM_VERSION=.*|PLATFORM_VERSION=v1.0.1|' \
+  -e 's|^PLATFORM_VERSION=.*|PLATFORM_VERSION=v1.0.2|' \
   -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${DB_PASSWORD}|" \
   -e "s|^DATABASE_URL=.*|DATABASE_URL=postgresql://microbio:${DB_PASSWORD}@db:5432/microbio|" \
   -e "s|^SESSION_SECRET=.*|SESSION_SECRET=${SESSION_SECRET}|" \
