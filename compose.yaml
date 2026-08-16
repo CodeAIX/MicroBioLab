@@ -75,7 +75,9 @@ services:
       - ./infra/exp-nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     networks: [frontend]
     read_only: true
-    tmpfs: [/tmp, /var/cache/nginx]
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+      - /var/cache/nginx:size=16m,uid=101,gid=101,mode=0755
     security_opt: ["no-new-privileges:true"]
     cap_drop: [ALL]
     healthcheck:
