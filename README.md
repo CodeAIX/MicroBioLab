@@ -1,6 +1,33 @@
 # 医学微生物学虚拟仿真实验平台
 
-可部署到普通 Linux VPS 的 V1 平台，用于安全上传、检查、构建、预览、发布和版本化管理单文件 React JSX 实验。平台软件与实验资产完全解耦；发布后的 `v000001` 等目录保持不可变，回滚只切换数据库中的生效版本。V1.1 增加教学排序、实验介绍页、稳定运行地址与二维码，以及完整的归档删除和封面管理。
+可部署到普通 Linux VPS 的医学微生物学虚拟仿真实验平台，用于安全上传、检查、构建、预览、发布和版本化管理单文件 React JSX 实验。平台软件与实验资产完全解耦；发布后的 `v000001` 等目录保持不可变，回滚只切换数据库中的生效版本。
+
+当前稳定版：[`v1.1.1`](https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.1.1)
+
+主要能力：
+
+- 隔离检查与构建 JSX，不执行上传源码、不开放动态依赖安装；
+- 不可变版本、预览、发布、下架、归档和回滚；
+- 教学顺序、学生首页、实验介绍页、稳定运行地址和二维码；
+- 可选封面、自动主题背景、实验与未发布版本删除；
+- Docker Compose、完整备份/恢复、升级/回滚和分级卸载；
+- 公开 GHCR 多架构镜像，可匿名拉取。
+
+## 快速部署
+
+```bash
+docker pull ghcr.io/codeaix/microbio-lab-app:v1.1.1
+docker pull ghcr.io/codeaix/microbio-lab-builder:v1.1.1
+```
+
+镜像只负责 App/Builder，完整部署还需要仓库中的 `compose.yaml`、`.env`、PostgreSQL 和实验静态站。请按 [VPS 部署与运维](README-VPS.md) 完成安装，不要直接手写 `docker run`。
+
+维护与二次构建：
+
+- [VPS 安装、升级、维护、备份、恢复和卸载](README-VPS.md)
+- [源码与多架构镜像构建方案](构建方案.md)
+- [新会话/其他 Agent 维护交接](HANDOFF.md)
+- [安全边界与威胁模型](SECURITY.md)
 
 ## 架构
 
@@ -104,8 +131,8 @@ docker compose exec app node dist/cli/disable-admin.js --email admin@example.com
 推送 `v*` 标签后，`release.yml` 在完整 CI 通过后发布 amd64/arm64 镜像：
 
 ```text
-ghcr.io/<owner>/microbio-lab-app:v1.1.0
-ghcr.io/<owner>/microbio-lab-builder:v1.1.0
+ghcr.io/<owner>/microbio-lab-app:v1.1.1
+ghcr.io/<owner>/microbio-lab-builder:v1.1.1
 ```
 
 同时生成 `1.1`、`1`、`sha-*`，稳定版本更新 `latest`，并创建带 Compose、环境样例、基础设施、脚本和校验和的 GitHub Release。仓库不保存 PAT，Actions 使用最小权限 `GITHUB_TOKEN`。
@@ -113,8 +140,8 @@ ghcr.io/<owner>/microbio-lab-builder:v1.1.0
 两个 GHCR Package 均为公开镜像，可匿名拉取：
 
 ```bash
-docker pull ghcr.io/codeaix/microbio-lab-app:v1.1.0
-docker pull ghcr.io/codeaix/microbio-lab-builder:v1.1.0
+docker pull ghcr.io/codeaix/microbio-lab-app:v1.1.1
+docker pull ghcr.io/codeaix/microbio-lab-builder:v1.1.1
 ```
 
 ## VPS 运维
@@ -124,8 +151,8 @@ docker pull ghcr.io/codeaix/microbio-lab-builder:v1.1.0
 ```bash
 ./scripts/healthcheck.sh
 ./scripts/backup.sh
-./scripts/upgrade.sh v1.1.0
-./scripts/rollback.sh v1.0.4
+./scripts/upgrade.sh v1.1.1
+./scripts/rollback.sh v1.1.0
 ./scripts/restore.sh /srv/microbio-lab/backups/2026-08-16_120000
 ./scripts/uninstall.sh
 ```
