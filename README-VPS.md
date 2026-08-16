@@ -1,6 +1,6 @@
 # VPS 部署与运维
 
-本文以公开版本 `v1.1.1` 为例，适用于 Ubuntu/Debian VPS。生产环境固定使用不可变的 `vX.Y.Z` 镜像标签，不建议直接使用 `latest`。
+本文以公开版本 `v1.1.2` 为例，适用于 Ubuntu/Debian VPS。生产环境固定使用不可变的 `vX.Y.Z` 镜像标签，不建议直接使用 `latest`。
 
 平台只监听 VPS 本机：
 
@@ -53,7 +53,7 @@ docker compose version
 仓库和 GHCR 镜像均为公开资源，不需要 GitHub Token 或 `docker login`：
 
 ```bash
-INSTALL_VERSION="v1.1.1"
+INSTALL_VERSION="v1.1.2"
 
 sudo install -d -o "$(id -u)" -g "$(id -g)" /opt/microbio-lab
 git clone --branch "$INSTALL_VERSION" --depth 1 \
@@ -79,8 +79,8 @@ cp .env.example .env
 chmod 600 .env
 sed -i \
   -e 's|^GHCR_OWNER=.*|GHCR_OWNER=codeaix|' \
-  -e 's|^PLATFORM_VERSION=.*|PLATFORM_VERSION=v1.1.1|' \
-  -e 's|^BUILDER_VERSION=.*|BUILDER_VERSION=v1.1.1|' \
+  -e 's|^PLATFORM_VERSION=.*|PLATFORM_VERSION=v1.1.2|' \
+  -e 's|^BUILDER_VERSION=.*|BUILDER_VERSION=v1.1.2|' \
   -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${DB_PASSWORD}|" \
   -e "s|^DATABASE_URL=.*|DATABASE_URL=postgresql://microbio:${DB_PASSWORD}@db:5432/microbio|" \
   -e "s|^SESSION_SECRET=.*|SESSION_SECRET=${SESSION_SECRET}|" \
@@ -122,8 +122,8 @@ exp.lab.example.com  -> HTTP -> 127.0.0.1:18081
 匿名拉取指定版本：
 
 ```bash
-docker pull ghcr.io/codeaix/microbio-lab-app:v1.1.1
-docker pull ghcr.io/codeaix/microbio-lab-builder:v1.1.1
+docker pull ghcr.io/codeaix/microbio-lab-app:v1.1.2
+docker pull ghcr.io/codeaix/microbio-lab-builder:v1.1.2
 ```
 
 生产部署应把 `.env` 中两个版本变量设为同一个不可变版本：
@@ -140,7 +140,7 @@ grep -E '^(PLATFORM_VERSION|BUILDER_VERSION)=' /opt/microbio-lab/.env
 
 ```bash
 cd /opt/microbio-lab
-TARGET_VERSION="v1.1.1"
+TARGET_VERSION="v1.1.2"
 DOWNLOAD_DIR="$(mktemp -d)"
 
 curl -fL \
@@ -169,7 +169,7 @@ rm -rf -- "$DOWNLOAD_DIR"
 
 ```bash
 cd /opt/microbio-lab
-sudo ./scripts/upgrade.sh v1.1.1
+sudo ./scripts/upgrade.sh v1.1.2
 ```
 
 ## 6. 日常维护

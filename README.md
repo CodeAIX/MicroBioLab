@@ -2,7 +2,7 @@
 
 可部署到普通 Linux VPS 的医学微生物学虚拟仿真实验平台，用于安全上传、检查、构建、预览、发布和版本化管理单文件 React JSX 实验。平台软件与实验资产完全解耦；发布后的 `v000001` 等目录保持不可变，回滚只切换数据库中的生效版本。
 
-当前稳定版：[`v1.1.1`](https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.1.1)
+当前稳定版：[`v1.1.2`](https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.1.2)
 
 主要能力：
 
@@ -16,8 +16,8 @@
 ## 快速部署
 
 ```bash
-docker pull ghcr.io/codeaix/microbio-lab-app:v1.1.1
-docker pull ghcr.io/codeaix/microbio-lab-builder:v1.1.1
+docker pull ghcr.io/codeaix/microbio-lab-app:v1.1.2
+docker pull ghcr.io/codeaix/microbio-lab-builder:v1.1.2
 ```
 
 镜像只负责 App/Builder，完整部署还需要仓库中的 `compose.yaml`、`.env`、PostgreSQL 和实验静态站。请按 [VPS 部署与运维](README-VPS.md) 完成安装，不要直接手写 `docker run`。
@@ -94,7 +94,7 @@ openssl rand -hex 32
 
 ## JSX V1 合同
 
-- 单个 UTF-8 `.jsx`，最大 2 MiB，恰好一个 default export。
+- 单个 UTF-8 `.jsx`，最大 10 MiB，恰好一个 default export。
 - 上传路径始终由 UUID 生成，原文件和 SHA256 永久保留。
 - V1 源码 import 白名单只有 `react`；Builder 内置 `react-dom` 仅用于 wrapper。
 - 禁止 Node 内置模块、`require`、动态 import、`eval`、`Function`、`fetch`、XHR、WebSocket、Worker、Beacon 和 Service Worker。
@@ -131,8 +131,8 @@ docker compose exec app node dist/cli/disable-admin.js --email admin@example.com
 推送 `v*` 标签后，`release.yml` 在完整 CI 通过后发布 amd64/arm64 镜像：
 
 ```text
-ghcr.io/<owner>/microbio-lab-app:v1.1.1
-ghcr.io/<owner>/microbio-lab-builder:v1.1.1
+ghcr.io/<owner>/microbio-lab-app:v1.1.2
+ghcr.io/<owner>/microbio-lab-builder:v1.1.2
 ```
 
 同时生成 `1.1`、`1`、`sha-*`，稳定版本更新 `latest`，并创建带 Compose、环境样例、基础设施、脚本和校验和的 GitHub Release。仓库不保存 PAT，Actions 使用最小权限 `GITHUB_TOKEN`。
@@ -140,8 +140,8 @@ ghcr.io/<owner>/microbio-lab-builder:v1.1.1
 两个 GHCR Package 均为公开镜像，可匿名拉取：
 
 ```bash
-docker pull ghcr.io/codeaix/microbio-lab-app:v1.1.1
-docker pull ghcr.io/codeaix/microbio-lab-builder:v1.1.1
+docker pull ghcr.io/codeaix/microbio-lab-app:v1.1.2
+docker pull ghcr.io/codeaix/microbio-lab-builder:v1.1.2
 ```
 
 ## VPS 运维
@@ -151,7 +151,7 @@ docker pull ghcr.io/codeaix/microbio-lab-builder:v1.1.1
 ```bash
 ./scripts/healthcheck.sh
 ./scripts/backup.sh
-./scripts/upgrade.sh v1.1.1
+./scripts/upgrade.sh v1.1.2
 ./scripts/rollback.sh v1.1.0
 ./scripts/restore.sh /srv/microbio-lab/backups/2026-08-16_120000
 ./scripts/uninstall.sh

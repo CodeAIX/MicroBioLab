@@ -1,7 +1,7 @@
 import { cp, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { AppError, formatVersion } from "@microbio/shared";
+import { AppError, COVER_MAX_UPLOAD_BYTES, formatVersion, JSX_MAX_UPLOAD_BYTES } from "@microbio/shared";
 import { config } from "./config.js";
 import { safeRelativePath, sha256 } from "./security.js";
 
@@ -10,7 +10,7 @@ export async function ensureStorage(): Promise<void> {
 }
 
 export function decodeJsx(buffer: Buffer): string {
-  if (buffer.byteLength > 2 * 1024 * 1024) throw new AppError("UPLOAD_INVALID", "JSX 文件不能超过 2 MiB");
+  if (buffer.byteLength > JSX_MAX_UPLOAD_BYTES) throw new AppError("UPLOAD_TOO_LARGE", "JSX 文件不能超过 10 MiB", 413);
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(buffer);
   } catch {
@@ -45,6 +45,7 @@ export async function removeSourceVersion(experimentId: string, versionId: strin
 }
 
 export async function saveCover(contents: Buffer): Promise<string> {
+  if (contents.byteLength > COVER_MAX_UPLOAD_BYTES) throw new AppError("UPLOAD_TOO_LARGE", "封面图片不能超过 2 MiB", 413);
   let extension: string | undefined;
   if (contents.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) extension = ".png";
   else if (contents[0] === 0xff && contents[1] === 0xd8 && contents[2] === 0xff) extension = ".jpg";

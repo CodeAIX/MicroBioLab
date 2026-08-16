@@ -8,7 +8,7 @@ export function multipartLimitError(error: unknown): AppError | null {
   const message = fieldname === "cover"
     ? "封面图片不能超过 2 MiB"
     : fieldname === "jsx"
-      ? "JSX 文件不能超过 2 MiB"
-      : "上传文件不能超过 2 MiB";
+      ? "JSX 文件不能超过 10 MiB"
+      : "上传文件不能超过 10 MiB";
   return new AppError("UPLOAD_TOO_LARGE", message, 413);
 }

@@ -9,7 +9,7 @@ describe("multipartLimitError", () => {
 
   it("identifies an oversized JSX file", () => {
     const result = multipartLimitError({ code: "FST_REQ_FILE_TOO_LARGE", part: { fieldname: "jsx" } });
-    expect(result).toMatchObject({ code: "UPLOAD_TOO_LARGE", message: "JSX 文件不能超过 2 MiB", statusCode: 413 });
+    expect(result).toMatchObject({ code: "UPLOAD_TOO_LARGE", message: "JSX 文件不能超过 10 MiB", statusCode: 413 });
   });
 
   it("ignores unrelated errors", () => {

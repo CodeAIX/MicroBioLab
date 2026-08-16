@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Link, Navigate, NavLink, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import QRCode from "qrcode";
+import { COVER_MAX_UPLOAD_BYTES, JSX_MAX_UPLOAD_BYTES } from "@microbio/shared";
 import { api, ApiClientError } from "./api";
 
 type User = { id: string; email: string; role: "ADMIN" };
@@ -19,7 +20,6 @@ type PublicExperiment = {
   version: string; iframeUrl: string; updated_at: string;
 };
 
-const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
 const statusNames: Record<string, string> = { draft: "草稿", queued: "排队中", running: "构建中", building: "构建中", success: "构建成功", failed: "构建失败", published: "已发布", hidden: "已下架", archived: "已归档" };
 const versionName = (n: number) => `v${String(n).padStart(6, "0")}`;
 
@@ -34,11 +34,11 @@ function Status({ value }: { value: string }) { return <span className={`status 
 function Empty({ children }: { children: ReactNode }) { return <div className="empty">{children}</div>; }
 function Loading() { return <div className="loading"><span />正在加载…</div>; }
 
-function uploadFile(form: HTMLFormElement, name: string, label: string, required = false): File | undefined {
+function uploadFile(form: HTMLFormElement, name: string, label: string, maxBytes: number, maxSizeLabel: string, required = false): File | undefined {
   const input = form.elements.namedItem(name) as HTMLInputElement | null;
   const file = input?.files?.[0];
   if (!file && required) throw new ApiClientError("UPLOAD_INVALID", `请选择${label}`, 400);
-  if (file && file.size > MAX_UPLOAD_BYTES) throw new ApiClientError("UPLOAD_TOO_LARGE", `${label}不能超过 2 MiB`, 413);
+  if (file && file.size > maxBytes) throw new ApiClientError("UPLOAD_TOO_LARGE", `${label}不能超过 ${maxSizeLabel}`, 413);
   return file;
 }
 
@@ -147,8 +147,8 @@ function Experiments() {
 
 function NewExperiment() {
   const navigate = useNavigate(); const [error, setError] = useState<unknown>(); const [busy, setBusy] = useState(false);
-  const submit = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const form = event.currentTarget; setBusy(true); setError(undefined); try { uploadFile(form, "jsx", "JSX 文件", true); const cover = uploadFile(form, "cover", "封面图片"); const body = new FormData(form); if (!cover) body.delete("cover"); const result = await api<{ experimentId: string }>("/api/experiments", { method: "POST", body }); navigate(`/admin/experiments/${result.experimentId}`); } catch (reason) { setError(reason); setBusy(false); } };
-  return <><PageHeader eyebrow="NEW EXPERIMENT" title="新建实验"><Link className="button ghost" to="/admin/experiments">取消</Link></PageHeader><form className="edit-form panel" onSubmit={submit}><ErrorNotice error={error} /><div className="form-grid"><label>实验名称 *<input name="title" required maxLength={200} placeholder="例如：肠道杆菌的分离培养与生化鉴定" /></label><label>Slug *<input name="slug" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="enterobacteria-identification" /><small>首次发布后不可修改</small></label><label>分类<input name="category" maxLength={100} placeholder="肠道杆菌" /></label><label>封面（可选）<input name="cover" type="file" accept="image/png,image/jpeg,image/webp" /><small>可留空，系统自动生成主题色块；最大 2 MiB</small></label><label className="wide">简介<textarea name="description" rows={7} maxLength={4000} placeholder="说明实验目标、主要内容、适用对象和学习要求" /></label><label className="wide file-field">JSX 实验文件 *<input name="jsx" type="file" accept=".jsx,text/jsx" required /><span>仅限单个 UTF-8 `.jsx` 文件，最大 2 MiB</span></label></div><div className="form-actions"><button className="button primary" disabled={busy}>{busy ? "上传并创建中…" : "创建实验并开始构建"}</button></div></form></>;
+  const submit = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const form = event.currentTarget; setBusy(true); setError(undefined); try { uploadFile(form, "jsx", "JSX 文件", JSX_MAX_UPLOAD_BYTES, "10 MiB", true); const cover = uploadFile(form, "cover", "封面图片", COVER_MAX_UPLOAD_BYTES, "2 MiB"); const body = new FormData(form); if (!cover) body.delete("cover"); const result = await api<{ experimentId: string }>("/api/experiments", { method: "POST", body }); navigate(`/admin/experiments/${result.experimentId}`); } catch (reason) { setError(reason); setBusy(false); } };
+  return <><PageHeader eyebrow="NEW EXPERIMENT" title="新建实验"><Link className="button ghost" to="/admin/experiments">取消</Link></PageHeader><form className="edit-form panel" onSubmit={submit}><ErrorNotice error={error} /><div className="form-grid"><label>实验名称 *<input name="title" required maxLength={200} placeholder="例如：肠道杆菌的分离培养与生化鉴定" /></label><label>Slug *<input name="slug" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="enterobacteria-identification" /><small>首次发布后不可修改</small></label><label>分类<input name="category" maxLength={100} placeholder="肠道杆菌" /></label><label>封面（可选）<input name="cover" type="file" accept="image/png,image/jpeg,image/webp" /><small>可留空，系统自动生成主题色块；最大 2 MiB</small></label><label className="wide">简介<textarea name="description" rows={7} maxLength={4000} placeholder="说明实验目标、主要内容、适用对象和学习要求" /></label><label className="wide file-field">JSX 实验文件 *<input name="jsx" type="file" accept=".jsx,text/jsx" required /><span>仅限单个 UTF-8 `.jsx` 文件，最大 10 MiB</span></label></div><div className="form-actions"><button className="button primary" disabled={busy}>{busy ? "上传并创建中…" : "创建实验并开始构建"}</button></div></form></>;
 }
 
 function ExperimentDetail() {
@@ -158,8 +158,8 @@ function ExperimentDetail() {
   useEffect(() => { if (!versions.some((version) => ["queued", "running", "building"].includes(version.status) || ["queued", "running"].includes(version.job_status))) return; const timer = setInterval(() => void load(), 1800); return () => clearInterval(timer); }, [versions]);
   const action = async (url: string, method = "POST") => { setError(undefined); try { await api(url, { method }); await load(); } catch (reason) { setError(reason); } };
   const updateInfo = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const data = new FormData(event.currentTarget); setError(undefined); try { await api(`/api/experiments/${id}`, { method: "PATCH", body: JSON.stringify({ title: data.get("title"), slug: data.get("slug"), category: data.get("category"), description: data.get("description") }) }); await load(); } catch (reason) { setError(reason); } };
-  const upload = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const form = event.currentTarget; setError(undefined); try { uploadFile(form, "jsx", "JSX 文件", true); await api(`/api/experiments/${id}/versions`, { method: "POST", body: new FormData(form) }); form.reset(); await load(); } catch (reason) { setError(reason); } };
-  const updateCover = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const form = event.currentTarget; setError(undefined); try { uploadFile(form, "cover", "封面图片", true); await api(`/api/experiments/${id}/cover`, { method: "POST", body: new FormData(form) }); form.reset(); await load(); } catch (reason) { setError(reason); } };
+  const upload = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const form = event.currentTarget; setError(undefined); try { uploadFile(form, "jsx", "JSX 文件", JSX_MAX_UPLOAD_BYTES, "10 MiB", true); await api(`/api/experiments/${id}/versions`, { method: "POST", body: new FormData(form) }); form.reset(); await load(); } catch (reason) { setError(reason); } };
+  const updateCover = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const form = event.currentTarget; setError(undefined); try { uploadFile(form, "cover", "封面图片", COVER_MAX_UPLOAD_BYTES, "2 MiB", true); await api(`/api/experiments/${id}/cover`, { method: "POST", body: new FormData(form) }); form.reset(); await load(); } catch (reason) { setError(reason); } };
   const removeVersion = async (version: Version) => { if (!window.confirm(`确定删除未发布的 ${versionName(version.version_number)} 吗？`)) return; await action(`/api/versions/${version.id}`, "DELETE"); };
   const removeExperiment = async () => { if (!item || deleteSlug !== item.slug || !window.confirm("永久删除后，源码、构建、发布文件和数据库记录均无法恢复。确定继续吗？")) return; setError(undefined); try { await api(`/api/experiments/${id}`, { method: "DELETE", body: JSON.stringify({ slug: deleteSlug }) }); navigate("/admin/experiments"); } catch (reason) { setError(reason); } };
   if (!item) return error ? <ErrorNotice error={error} /> : <Loading />;

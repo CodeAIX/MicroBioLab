@@ -7,9 +7,9 @@
 - 仓库：`https://github.com/CodeAIX/MicroBioLab`
 - 可见性：Public
 - 默认分支：`main`
-- 当前发布：`v1.1.1`
-- 主镜像：`ghcr.io/codeaix/microbio-lab-app:v1.1.1`
-- Builder 镜像：`ghcr.io/codeaix/microbio-lab-builder:v1.1.1`
+- 当前发布：`v1.1.2`
+- 主镜像：`ghcr.io/codeaix/microbio-lab-app:v1.1.2`
+- Builder 镜像：`ghcr.io/codeaix/microbio-lab-builder:v1.1.2`
 - 镜像架构：`linux/amd64`、`linux/arm64`
 - 许可证：MIT
 - Node.js：24+
@@ -63,7 +63,7 @@ VPS 曾对 `compose.yaml` 的 Nginx tmpfs 权限做过本地修正；该修正�
 已实现：
 
 - 管理员 Session 登录和 Argon2id 密码管理；
-- 单文件 React JSX 上传，限制 2 MiB；
+- 单文件 React JSX 上传，限制 10 MiB；封面图片独立限制 2 MiB；
 - AST 静态安全检查，仅允许白名单 import；
 - 隔离 Builder 构建，不执行上传源码、不运行 shell、不动态安装依赖；
 - 实验源码、构建、发布和版本审计；
@@ -157,6 +157,8 @@ samples                  永久测试 fixture
 
 另一个肠道杆菌实验文件可能已经受 Git 管理；不要把真实教学资产替换成测试 fixture。自动化测试固定使用 `samples/enterobacteria/App.jsx`。
 
+`/Users/x/Agent/MicroBioLab-artifacts` 中的 v1.1.1 离线包是只读历史备份。用户已明确要求后续版本不再制作、更新或维护本地离线包；发布在线版本时不要改动该目录。
+
 ## 7. 新维护会话的启动顺序
 
 ```bash
@@ -243,6 +245,7 @@ GitHub CI 成功标准：
 - `v1.0.4`：超大 multipart 封面显示 INTERNAL_ERROR；必须保持稳定上传错误映射；
 - `v1.1.0`：教学排序、介绍页、二维码、无封面背景和删除管理；
 - `v1.1.1`：运维脚本、完整备份、离线方案和维护交接。
+- `v1.1.2`：JSX 上传上限提高到 10 MiB；本地 v1.1.1 离线包转为只读历史备份。
 
 ## 12. 凭据与外部状态
 

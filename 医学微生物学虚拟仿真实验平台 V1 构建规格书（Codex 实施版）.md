@@ -719,7 +719,7 @@ V1 只接受：
 最大大小：
 
 ```text
-2 MiB
+10 MiB
 ```
 
 UTF-8。
@@ -2250,7 +2250,7 @@ Session Token
 
 上传时：
 
-- 最大 2 MiB；
+- 最大 10 MiB；
 - 仅允许 `.jsx`；
 - 检查 MIME 但不只相信 MIME；
 - 使用服务器生成 UUID 文件名；
