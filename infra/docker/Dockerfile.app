@@ -11,8 +11,6 @@ COPY packages/shared ./packages/shared
 COPY apps/api ./apps/api
 COPY apps/web ./apps/web
 RUN npm run build -w @microbio/shared && npm run build -w @microbio/web && npm run build -w @microbio/api
-RUN npm prune --omit=dev
-
 FROM node:24-bookworm-slim AS runtime
 ENV NODE_ENV=production PORT=8080 WEB_ROOT=/app/apps/web/dist MIGRATIONS_DIR=/app/db/migrations
 WORKDIR /app

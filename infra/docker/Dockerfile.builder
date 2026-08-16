@@ -10,8 +10,6 @@ RUN npm ci
 COPY packages/shared ./packages/shared
 COPY services/builder ./services/builder
 RUN npm run build -w @microbio/shared && npm run build -w @microbio/builder
-RUN npm prune --omit=dev
-
 FROM node:24-bookworm-slim AS runtime
 ENV NODE_ENV=production BUILDER_NODE_MODULES=/app/node_modules
 WORKDIR /app
