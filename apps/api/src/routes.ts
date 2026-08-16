@@ -8,6 +8,7 @@ import { pool, transaction } from "./db.js";
 import { requireAdmin } from "./auth.js";
 import { decodeJsx, publishBuild, removeSourceVersion, saveCover, saveSource } from "./storage.js";
 import { newPreviewToken, safeRelativePath, sanitizeOriginalFilename, verifyPreviewToken } from "./security.js";
+import { multipartLimitError } from "./upload-errors.js";
 
 async function audit(client: { query: (sql: string, values?: unknown[]) => Promise<unknown> }, request: FastifyRequest, action: string, entityType: string, entityId?: string, metadata: object = {}): Promise<void> {
   await client.query("INSERT INTO audit_logs(user_id,action,entity_type,entity_id,metadata) VALUES ($1,$2,$3,$4,$5)", [request.user?.id ?? null, action, entityType, entityId ?? null, JSON.stringify(metadata)]);
@@ -17,20 +18,24 @@ async function readMultipart(request: FastifyRequest): Promise<{ fields: Record<
   const fields: Record<string, string> = {};
   let file: { filename: string; contents: Buffer } | undefined;
   let cover: Buffer | undefined;
-  for await (const part of request.parts()) {
-    if (part.type === "file") {
-      if (part.fieldname === "cover") {
-        if (cover) throw new AppError("UPLOAD_INVALID", "只能上传一张封面");
-        cover = await part.toBuffer();
+  try {
+    for await (const part of request.parts()) {
+      if (part.type === "file") {
+        if (part.fieldname === "cover") {
+          if (cover) throw new AppError("UPLOAD_INVALID", "只能上传一张封面");
+          cover = await part.toBuffer();
+        } else {
+          if (file) throw new AppError("UPLOAD_INVALID", "V1 每次只允许上传一个 JSX 文件");
+          if (!part.filename.toLowerCase().endsWith(".jsx")) throw new AppError("UPLOAD_INVALID", "只允许上传 .jsx 文件");
+          if (!["text/jsx", "text/plain", "text/javascript", "application/javascript", "application/octet-stream"].includes(part.mimetype)) throw new AppError("UPLOAD_INVALID", "JSX 文件 MIME 类型不受支持");
+          file = { filename: sanitizeOriginalFilename(part.filename), contents: await part.toBuffer() };
+        }
       } else {
-        if (file) throw new AppError("UPLOAD_INVALID", "V1 每次只允许上传一个 JSX 文件");
-        if (!part.filename.toLowerCase().endsWith(".jsx")) throw new AppError("UPLOAD_INVALID", "只允许上传 .jsx 文件");
-        if (!["text/jsx", "text/plain", "text/javascript", "application/javascript", "application/octet-stream"].includes(part.mimetype)) throw new AppError("UPLOAD_INVALID", "JSX 文件 MIME 类型不受支持");
-        file = { filename: sanitizeOriginalFilename(part.filename), contents: await part.toBuffer() };
+        fields[part.fieldname] = String(part.value);
       }
-    } else {
-      fields[part.fieldname] = String(part.value);
     }
+  } catch (error) {
+    throw multipartLimitError(error) ?? error;
   }
   if (!file) throw new AppError("UPLOAD_INVALID", "请选择 JSX 文件");
   decodeJsx(file.contents);
