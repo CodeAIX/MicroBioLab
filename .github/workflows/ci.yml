@@ -1,0 +1,55 @@
+name: CI
+on:
+  workflow_call:
+  push:
+  pull_request:
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - run: npm audit --audit-level=high
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  containers-and-e2e:
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Validate production Compose
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+      - name: Build both owned images
+        run: |
+          docker build -f infra/docker/Dockerfile.app -t microbio-lab-app:test .
+          docker build -f infra/docker/Dockerfile.builder -t microbio-lab-builder:test .
+      - name: Start integration stack
+        run: docker compose -f compose.dev.yaml up -d --build --wait
+      - name: Sample JSX integration
+        run: ./tests/integration/sample-flow.sh
+      - name: Browser E2E
+        run: npm run test:e2e
+      - name: Persistence smoke test
+        run: |
+          docker compose -f compose.dev.yaml restart app builder
+          curl --retry 20 --retry-all-errors --retry-delay 2 --fail http://127.0.0.1:18080/api/public/experiments/enterobacteria-identification
+      - name: Diagnostics
+        if: failure()
+        run: docker compose -f compose.dev.yaml logs --no-color
+      - name: Stop stack
+        if: always()
+        run: docker compose -f compose.dev.yaml down -v

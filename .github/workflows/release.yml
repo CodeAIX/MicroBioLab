@@ -1,0 +1,76 @@
+name: Release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: verify
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compute image tags
+        id: tags
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          MAJOR="${VERSION%%.*}"
+          REST="${VERSION#*.}"
+          MINOR="${REST%%.*}"
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
+          APP="ghcr.io/${OWNER}/microbio-lab-app"
+          BUILDER="ghcr.io/${OWNER}/microbio-lab-builder"
+          STABLE=true
+          if [[ "$VERSION" == *-* ]]; then STABLE=false; fi
+          {
+            echo "app=${APP}"
+            echo "builder=${BUILDER}"
+            echo "stable=${STABLE}"
+            echo "tags_app=${APP}:${GITHUB_REF_NAME},${APP}:${MAJOR}.${MINOR},${APP}:${MAJOR},${APP}:sha-${GITHUB_SHA::8}"
+            echo "tags_builder=${BUILDER}:${GITHUB_REF_NAME},${BUILDER}:${MAJOR}.${MINOR},${BUILDER}:${MAJOR},${BUILDER}:sha-${GITHUB_SHA::8}"
+          } >> "$GITHUB_OUTPUT"
+      - name: Build and push app
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/Dockerfile.app
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags_app }}
+      - name: Build and push builder
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/Dockerfile.builder
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags_builder }}
+      - name: Add latest tags for stable release
+        if: steps.tags.outputs.stable == 'true'
+        run: |
+          docker buildx imagetools create -t "${{ steps.tags.outputs.app }}:latest" "${{ steps.tags.outputs.app }}:${GITHUB_REF_NAME}"
+          docker buildx imagetools create -t "${{ steps.tags.outputs.builder }}:latest" "${{ steps.tags.outputs.builder }}:${GITHUB_REF_NAME}"
+      - name: Assemble release assets
+        run: |
+          mkdir release-assets
+          cp compose.yaml .env.example README-VPS.md CHANGELOG.md release-assets/
+          cp -R infra scripts docs release-assets/
+          tar -C release-assets -czf "microbio-lab-${GITHUB_REF_NAME}.tar.gz" .
+          sha256sum "microbio-lab-${GITHUB_REF_NAME}.tar.gz" > SHA256SUMS
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" "microbio-lab-${GITHUB_REF_NAME}.tar.gz" SHA256SUMS --generate-notes --verify-tag

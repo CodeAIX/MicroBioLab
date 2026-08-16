@@ -1,0 +1,25 @@
+{
+  "name": "microbio-virtual-lab",
+  "version": "1.0.0",
+  "private": true,
+  "engines": { "node": ">=24" },
+  "workspaces": ["apps/*", "services/*", "packages/*"],
+  "scripts": {
+    "prelint": "npm run build -w @microbio/shared",
+    "pretest": "npm run build -w @microbio/shared",
+    "pretypecheck": "npm run build -w @microbio/shared",
+    "build": "npm run build -w @microbio/shared && npm run build -w @microbio/web && npm run build -w @microbio/api && npm run build -w @microbio/builder",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test:e2e": "playwright test",
+    "dev:api": "npm run dev -w @microbio/api",
+    "dev:web": "npm run dev -w @microbio/web",
+    "dev:builder": "npm run dev -w @microbio/builder"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}

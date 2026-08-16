@@ -1,0 +1,58 @@
+name: microbio-lab-dev
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: microbio
+      POSTGRES_USER: microbio
+      POSTGRES_PASSWORD: microbio
+    ports: ["127.0.0.1:15432:5432"]
+    volumes: ["dev-postgres:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U microbio -d microbio"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+  app:
+    build: { context: ., dockerfile: infra/docker/Dockerfile.app }
+    environment:
+      DATABASE_URL: postgresql://microbio:microbio@db:5432/microbio
+      SESSION_SECRET: development-session-secret-at-least-32-chars
+      SESSION_SECURE: "false"
+      PLATFORM_ORIGIN: http://localhost:18080
+      EXPERIMENT_ORIGIN: http://localhost:18081
+      SOURCE_ROOT: /data/sources
+      BUILD_ROOT: /data/builds
+      PUBLISHED_ROOT: /data/published
+      COVER_ROOT: /data/covers
+    ports: ["127.0.0.1:18080:8080"]
+    volumes:
+      - dev-sources:/data/sources
+      - dev-builds:/data/builds
+      - dev-published:/data/published
+      - dev-covers:/data/covers
+    depends_on: { db: { condition: service_healthy } }
+  builder:
+    build: { context: ., dockerfile: infra/docker/Dockerfile.builder }
+    environment:
+      DATABASE_URL: postgresql://microbio:microbio@db:5432/microbio
+      SOURCE_ROOT: /data/sources
+      BUILD_ROOT: /data/builds
+      BUILDER_VERSION: dev
+    volumes:
+      - dev-sources:/data/sources:ro
+      - dev-builds:/data/builds
+    depends_on: { db: { condition: service_healthy } }
+  exp-web:
+    image: nginx:1.27-alpine
+    ports: ["127.0.0.1:18081:8080"]
+    volumes:
+      - dev-published:/usr/share/nginx/html/e:ro
+      - ./infra/exp-nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/exp-nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+volumes:
+  dev-postgres: {}
+  dev-sources: {}
+  dev-builds: {}
+  dev-published: {}
+  dev-covers: {}
