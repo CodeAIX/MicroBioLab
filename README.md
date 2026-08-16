@@ -102,8 +102,8 @@ docker compose exec app node dist/cli/disable-admin.js --email admin@example.com
 推送 `v*` 标签后，`release.yml` 在完整 CI 通过后发布 amd64/arm64 镜像：
 
 ```text
-ghcr.io/<owner>/microbio-lab-app:v1.0.2
-ghcr.io/<owner>/microbio-lab-builder:v1.0.2
+ghcr.io/<owner>/microbio-lab-app:v1.0.3
+ghcr.io/<owner>/microbio-lab-builder:v1.0.3
 ```
 
 同时生成 `1.0`、`1`、`sha-*`，稳定版本更新 `latest`，并创建带 Compose、环境样例、基础设施、脚本和校验和的 GitHub Release。仓库不保存 PAT，Actions 使用最小权限 `GITHUB_TOKEN`。
@@ -111,8 +111,8 @@ ghcr.io/<owner>/microbio-lab-builder:v1.0.2
 两个 GHCR Package 均为公开镜像，可匿名拉取：
 
 ```bash
-docker pull ghcr.io/codeaix/microbio-lab-app:v1.0.2
-docker pull ghcr.io/codeaix/microbio-lab-builder:v1.0.2
+docker pull ghcr.io/codeaix/microbio-lab-app:v1.0.3
+docker pull ghcr.io/codeaix/microbio-lab-builder:v1.0.3
 ```
 
 ## VPS 运维

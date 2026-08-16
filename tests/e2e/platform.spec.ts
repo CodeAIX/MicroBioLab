@@ -23,3 +23,19 @@ test("administrator can log in and preview the immutable version", async ({ page
   const frame = page.frameLocator('iframe[title="管理员预览"]');
   await expect(frame.getByText("肠道杆菌的分离培养与生化鉴定").first()).toBeVisible();
 });
+
+test("administrator can upload a new version without a stale form error", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("邮箱").fill("admin@example.com");
+  await page.getByLabel("密码").fill("IntegrationTest-Password-2026");
+  await page.getByRole("button", { name: "登录" }).click();
+  await page.getByRole("link", { name: "▤ 实验管理", exact: true }).click();
+  await page.getByRole("link", { name: "管理 →", exact: true }).click();
+
+  await page.locator('.inline-upload input[type="file"]').setInputFiles("samples/enterobacteria/App.jsx");
+  await page.getByRole("button", { name: "上传新版", exact: true }).click();
+
+  await expect(page.getByText("Cannot read properties of null")).toHaveCount(0);
+  await expect(page.getByText("v000002", { exact: true })).toBeVisible();
+  await expect(page.locator('.inline-upload input[type="file"]')).toHaveValue("");
+});
