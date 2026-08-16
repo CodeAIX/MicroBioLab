@@ -16,7 +16,7 @@ test("administrator can log in and see the immutable version", async ({ page }) 
   await page.getByLabel("密码").fill("IntegrationTest-Password-2026");
   await page.getByRole("button", { name: "登录" }).click();
   await expect(page.getByRole("heading", { name: "控制台" })).toBeVisible();
-  await page.getByRole("link", { name: /实验管理/ }).click();
-  await page.getByRole("link", { name: /管理/ }).click();
+  await page.locator('a[href="/admin/experiments"]').click();
+  await page.getByRole("link", { name: "管理 →", exact: true }).click();
   await expect(page.getByText("v000001", { exact: true })).toBeVisible();
 });
