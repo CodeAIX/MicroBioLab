@@ -39,7 +39,26 @@ async function readMultipart(request: FastifyRequest): Promise<{ fields: Record<
   }
   if (!file) throw new AppError("UPLOAD_INVALID", "请选择 JSX 文件");
   decodeJsx(file.contents);
-  return { fields, ...file, ...(cover ? { cover } : {}) };
+  return { fields, ...file, ...(cover?.byteLength ? { cover } : {}) };
+}
+
+async function readCoverUpload(request: FastifyRequest): Promise<Buffer> {
+  let cover: Buffer | undefined;
+  try {
+    for await (const part of request.parts()) {
+      if (part.type !== "file") continue;
+      if (part.fieldname !== "cover") {
+        await part.toBuffer();
+        throw new AppError("UPLOAD_INVALID", "只允许上传一张封面图片");
+      }
+      if (cover) throw new AppError("UPLOAD_INVALID", "只能上传一张封面");
+      cover = await part.toBuffer();
+    }
+  } catch (error) {
+    throw multipartLimitError(error) ?? error;
+  }
+  if (!cover?.byteLength) throw new AppError("UPLOAD_INVALID", "请选择封面图片");
+  return cover;
 }
 
 async function createVersion(request: FastifyRequest, experimentId: string, requestedVersionNumber: number | null, filename: string, contents: Buffer): Promise<string> {
@@ -82,9 +101,9 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/api/public/experiments", async () => {
     const result = await pool.query(
-      `SELECT e.slug,e.title,e.description,e.category,e.cover_path,v.version_number
+      `SELECT e.slug,e.title,e.description,e.category,e.cover_path,e.updated_at,v.version_number
        FROM experiments e JOIN experiment_versions v ON v.id=e.active_version_id
-       WHERE e.status='published' ORDER BY e.updated_at DESC`,
+       WHERE e.status='published' ORDER BY e.display_order,e.created_at`,
     );
     return { experiments: result.rows.map((row) => ({ ...row, version: formatVersion(row.version_number as number), iframeUrl: `${config.experimentOrigin}/e/${row.slug as string}/${formatVersion(row.version_number as number)}/` })) };
   });
@@ -92,7 +111,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/public/experiments/:slug", async (request) => {
     const { slug } = request.params as { slug: string };
     const result = await pool.query(
-      `SELECT e.slug,e.title,e.description,e.category,e.cover_path,v.version_number
+      `SELECT e.slug,e.title,e.description,e.category,e.cover_path,e.updated_at,v.version_number
        FROM experiments e JOIN experiment_versions v ON v.id=e.active_version_id WHERE e.slug=$1 AND e.status='published'`,
       [slug],
     );
@@ -124,9 +143,33 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     const result = await pool.query(
       `SELECT e.*,v.version_number AS active_version_number,
        (SELECT count(*)::int FROM experiment_versions ev WHERE ev.experiment_id=e.id) AS version_count
-       FROM experiments e LEFT JOIN experiment_versions v ON v.id=e.active_version_id ORDER BY e.updated_at DESC`,
+       FROM experiments e LEFT JOIN experiment_versions v ON v.id=e.active_version_id ORDER BY e.display_order,e.created_at`,
     );
     return { experiments: result.rows };
+  });
+
+  app.put("/api/experiments/order", { preHandler: requireAdmin }, async (request) => {
+    const body = (request.body ?? {}) as { experimentIds?: unknown };
+    const experimentIds = body.experimentIds;
+    if (!Array.isArray(experimentIds) || experimentIds.length > 1000 || experimentIds.some((id) => typeof id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id))) {
+      throw new AppError("ORDER_INVALID", "教学顺序数据格式不正确");
+    }
+    if (new Set(experimentIds).size !== experimentIds.length) throw new AppError("ORDER_INVALID", "教学顺序中存在重复实验");
+    await transaction(async (client) => {
+      const existing = await client.query("SELECT id FROM experiments FOR UPDATE");
+      const existingIds = new Set(existing.rows.map((row) => row.id as string));
+      if (experimentIds.length !== existingIds.size || experimentIds.some((id) => !existingIds.has(id as string))) {
+        throw new AppError("ORDER_CONFLICT", "实验列表已发生变化，请刷新后重试", 409);
+      }
+      await client.query(
+        `UPDATE experiments SET display_order=(ordering.position*10)::integer
+         FROM unnest($1::uuid[]) WITH ORDINALITY AS ordering(id,position)
+         WHERE experiments.id=ordering.id`,
+        [experimentIds],
+      );
+      await audit(client, request, "reorder_experiments", "experiment", undefined, { count: experimentIds.length });
+    });
+    return { ok: true };
   });
 
   app.post("/api/experiments", { preHandler: requireAdmin }, async (request, reply) => {
@@ -135,11 +178,12 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     if (!title || title.length > 200) throw new AppError("UPLOAD_INVALID", "实验标题必填且最长 200 个字符");
     const slug = assertSlug(upload.fields.slug ?? "");
     const experimentId = randomUUID();
-    const coverPath = upload.cover ? await saveCover(experimentId, upload.cover) : null;
+    const coverPath = upload.cover ? await saveCover(upload.cover) : null;
     try {
       await transaction(async (client) => {
         await client.query(
-          "INSERT INTO experiments(id,slug,title,description,category,cover_path,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+          `INSERT INTO experiments(id,slug,title,description,category,cover_path,created_by,display_order)
+           SELECT $1,$2,$3,$4,$5,$6,$7,COALESCE(max(display_order),0)+10 FROM experiments`,
           [experimentId, slug, title, upload.fields.description?.slice(0, 4000) ?? "", upload.fields.category?.slice(0, 100) ?? "", coverPath, request.user!.id],
         );
         await audit(client, request, "create_experiment", "experiment", experimentId, { slug });
@@ -163,7 +207,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   app.patch("/api/experiments/:id", { preHandler: requireAdmin }, async (request) => {
     const { id } = request.params as { id: string };
-    const body = request.body as { title?: string; description?: string; category?: string; slug?: string };
+    const body = (request.body ?? {}) as { title?: string; description?: string; category?: string; slug?: string };
     const current = await pool.query("SELECT slug,slug_locked FROM experiments WHERE id=$1", [id]);
     if (!current.rowCount) throw new AppError("NOT_FOUND", "实验不存在", 404);
     const nextSlug = body.slug ? assertSlug(body.slug) : current.rows[0]!.slug as string;
@@ -175,6 +219,40 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       );
       await audit(client, request, "update_experiment", "experiment", id);
     });
+    return { ok: true };
+  });
+
+  app.post("/api/experiments/:id/cover", { preHandler: requireAdmin }, async (request) => {
+    const { id } = request.params as { id: string };
+    const coverPath = await saveCover(await readCoverUpload(request));
+    let previousPath: string | null = null;
+    try {
+      await transaction(async (client) => {
+        const found = await client.query("SELECT cover_path FROM experiments WHERE id=$1 FOR UPDATE", [id]);
+        if (!found.rowCount) throw new AppError("NOT_FOUND", "实验不存在", 404);
+        previousPath = found.rows[0]!.cover_path as string | null;
+        await client.query("UPDATE experiments SET cover_path=$2,updated_at=now() WHERE id=$1", [id, coverPath]);
+        await audit(client, request, "update_cover", "experiment", id, { coverPath });
+      });
+    } catch (error) {
+      await rm(path.join(config.coverRoot, coverPath), { force: true });
+      throw error;
+    }
+    if (previousPath) await rm(path.join(config.coverRoot, safeRelativePath(previousPath)), { force: true });
+    return { ok: true, coverPath };
+  });
+
+  app.delete("/api/experiments/:id/cover", { preHandler: requireAdmin }, async (request) => {
+    const { id } = request.params as { id: string };
+    let previousPath: string | null = null;
+    await transaction(async (client) => {
+      const found = await client.query("SELECT cover_path FROM experiments WHERE id=$1 FOR UPDATE", [id]);
+      if (!found.rowCount) throw new AppError("NOT_FOUND", "实验不存在", 404);
+      previousPath = found.rows[0]!.cover_path as string | null;
+      await client.query("UPDATE experiments SET cover_path=NULL,updated_at=now() WHERE id=$1", [id]);
+      await audit(client, request, "delete_cover", "experiment", id);
+    });
+    if (previousPath) await rm(path.join(config.coverRoot, safeRelativePath(previousPath)), { force: true });
     return { ok: true };
   });
 
@@ -235,17 +313,21 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete("/api/versions/:id", { preHandler: requireAdmin }, async (request) => {
     const { id } = request.params as { id: string };
-    const found = await pool.query(
-      `SELECT v.experiment_id,v.published_at,e.active_version_id FROM experiment_versions v JOIN experiments e ON e.id=v.experiment_id WHERE v.id=$1`, [id],
-    );
-    if (!found.rowCount) throw new AppError("NOT_FOUND", "版本不存在", 404);
-    if (found.rows[0]!.active_version_id === id) throw new AppError("VERSION_ACTIVE", "当前生效版本不能删除", 409);
-    if (found.rows[0]!.published_at) throw new AppError("VERSION_PUBLISHED", "已发布过的历史版本不可删除", 409);
-    await transaction(async (client) => {
+    const deleted = await transaction(async (client) => {
+      const found = await client.query(
+        `SELECT v.experiment_id,v.published_at,v.status,e.active_version_id
+         FROM experiment_versions v JOIN experiments e ON e.id=v.experiment_id
+         WHERE v.id=$1 FOR UPDATE OF v,e`, [id],
+      );
+      if (!found.rowCount) throw new AppError("NOT_FOUND", "版本不存在", 404);
+      if (found.rows[0]!.active_version_id === id) throw new AppError("VERSION_ACTIVE", "当前生效版本不能删除", 409);
+      if (found.rows[0]!.published_at) throw new AppError("VERSION_PUBLISHED", "已发布过的历史版本不可删除", 409);
+      if (["queued", "building"].includes(found.rows[0]!.status as string)) throw new AppError("VERSION_BUSY", "构建中的版本暂时不能删除", 409);
       await audit(client, request, "delete_version", "experiment_version", id);
       await client.query("DELETE FROM experiment_versions WHERE id=$1", [id]);
+      return found.rows[0]!;
     });
-    await removeSourceVersion(found.rows[0]!.experiment_id as string, id);
+    await removeSourceVersion(deleted.experiment_id as string, id);
     await rm(path.join(config.buildRoot, id), { recursive: true, force: true });
     return { ok: true };
   });
@@ -267,19 +349,21 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete("/api/experiments/:id", { preHandler: requireAdmin }, async (request) => {
     const { id } = request.params as { id: string };
-    const body = request.body as { slug?: string };
-    const found = await pool.query("SELECT slug,status,cover_path FROM experiments WHERE id=$1", [id]);
-    if (!found.rowCount) throw new AppError("NOT_FOUND", "实验不存在", 404);
-    if (found.rows[0]!.status !== "archived" || body.slug !== found.rows[0]!.slug) throw new AppError("DELETE_CONFIRMATION_REQUIRED", "请先归档实验并输入完整 Slug 确认", 409);
-    const versionIds = (await pool.query("SELECT id FROM experiment_versions WHERE experiment_id=$1", [id])).rows.map((row) => row.id as string);
-    await transaction(async (client) => {
+    const body = (request.body ?? {}) as { slug?: string };
+    const deleted = await transaction(async (client) => {
+      const found = await client.query("SELECT slug,status,cover_path FROM experiments WHERE id=$1 FOR UPDATE", [id]);
+      if (!found.rowCount) throw new AppError("NOT_FOUND", "实验不存在", 404);
+      if (found.rows[0]!.status !== "archived" || body.slug !== found.rows[0]!.slug) throw new AppError("DELETE_CONFIRMATION_REQUIRED", "请先归档实验并输入完整 Slug 确认", 409);
+      const versions = await client.query("SELECT id,status FROM experiment_versions WHERE experiment_id=$1 FOR UPDATE", [id]);
+      if (versions.rows.some((version) => ["queued", "building"].includes(version.status as string))) throw new AppError("EXPERIMENT_BUSY", "仍有版本正在构建，请稍后再删除", 409);
       await audit(client, request, "delete_experiment", "experiment", id, { slug: body.slug });
       await client.query("DELETE FROM experiments WHERE id=$1", [id]);
+      return { ...found.rows[0]!, versionIds: versions.rows.map((row) => row.id as string) };
     });
     await rm(path.join(config.sourceRoot, id), { recursive: true, force: true });
-    await Promise.all(versionIds.map((versionId) => rm(path.join(config.buildRoot, versionId), { recursive: true, force: true })));
-    await rm(path.join(config.publishedRoot, safeRelativePath(found.rows[0]!.slug as string)), { recursive: true, force: true });
-    if (found.rows[0]!.cover_path) await rm(path.join(config.coverRoot, safeRelativePath(found.rows[0]!.cover_path as string)), { force: true });
+    await Promise.all(deleted.versionIds.map((versionId: string) => rm(path.join(config.buildRoot, versionId), { recursive: true, force: true })));
+    await rm(path.join(config.publishedRoot, safeRelativePath(deleted.slug as string)), { recursive: true, force: true });
+    if (deleted.cover_path) await rm(path.join(config.coverRoot, safeRelativePath(deleted.cover_path as string)), { force: true });
     return { ok: true };
   });
 

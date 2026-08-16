@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_DIR"
 sed -i.bak "s/^PLATFORM_VERSION=.*/PLATFORM_VERSION=$1/" .env
+sed -i.bak "s/^BUILDER_VERSION=.*/BUILDER_VERSION=$1/" .env
 docker compose pull app builder
 docker compose up -d app builder
 "$SCRIPT_DIR/healthcheck.sh"

@@ -9,6 +9,7 @@ echo "升级：${CURRENT:-unknown} -> $1"
 "$SCRIPT_DIR/backup.sh"
 cp .env .env.pre-upgrade
 sed -i.bak "s/^PLATFORM_VERSION=.*/PLATFORM_VERSION=$1/" .env
+sed -i.bak "s/^BUILDER_VERSION=.*/BUILDER_VERSION=$1/" .env
 docker compose pull
 docker compose up -d
 if ! "$SCRIPT_DIR/healthcheck.sh"; then

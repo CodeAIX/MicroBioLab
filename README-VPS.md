@@ -48,7 +48,7 @@ docker compose version
 
 ```bash
 sudo install -d -o "$(id -u)" -g "$(id -g)" /opt/microbio-lab
-git clone --branch v1.0.2 --depth 1 \
+git clone --branch v1.1.0 --depth 1 \
   https://github.com/CodeAIX/MicroBioLab.git \
   /opt/microbio-lab
 cd /opt/microbio-lab
@@ -69,7 +69,8 @@ cp .env.example .env
 chmod 600 .env
 sed -i \
   -e 's|^GHCR_OWNER=.*|GHCR_OWNER=codeaix|' \
-  -e 's|^PLATFORM_VERSION=.*|PLATFORM_VERSION=v1.0.2|' \
+  -e 's|^PLATFORM_VERSION=.*|PLATFORM_VERSION=v1.1.0|' \
+  -e 's|^BUILDER_VERSION=.*|BUILDER_VERSION=v1.1.0|' \
   -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${DB_PASSWORD}|" \
   -e "s|^DATABASE_URL=.*|DATABASE_URL=postgresql://microbio:${DB_PASSWORD}@db:5432/microbio|" \
   -e "s|^SESSION_SECRET=.*|SESSION_SECRET=${SESSION_SECRET}|" \
@@ -110,12 +111,32 @@ exp.lab.example.com  -> HTTP -> 127.0.0.1:18081
 
 浏览器访问 `https://lab.example.com/login`。外部必须使用 HTTPS；Tunnel 到本机服务使用 HTTP。两个域名不能相同。
 
+实验站根路径显示 404 是预期行为，它只托管版本化实验静态文件。学生从主平台首页进入介绍页，再通过稳定运行地址和二维码进入实验。
+
 本机检查：
 
 ```bash
 curl -fsS http://127.0.0.1:18080/health/ready
 curl -fsS http://127.0.0.1:18081/healthz
 ```
+
+## 从 v1.0.x 升级到 v1.1.0
+
+不需要安装新依赖，也不需要修改端口或 Cloudflare Tunnel。先备份，再切换两个版本变量；应用启动时会自动执行增量数据库迁移：
+
+```bash
+cd /opt/microbio-lab
+sudo ./scripts/backup.sh
+sudo sed -i \
+  -e 's|^PLATFORM_VERSION=.*|PLATFORM_VERSION=v1.1.0|' \
+  -e 's|^BUILDER_VERSION=.*|BUILDER_VERSION=v1.1.0|' \
+  .env
+sudo docker compose pull app builder
+sudo docker compose up -d --wait app builder
+./scripts/healthcheck.sh
+```
+
+升级不会改变 `/srv/microbio-lab` 中的源码、构建结果、发布文件、封面或数据库数据。
 
 ## 日常命令
 
@@ -126,7 +147,7 @@ sudo docker compose logs -f app
 sudo docker compose logs -f builder
 sudo ./scripts/backup.sh
 sudo ./scripts/upgrade.sh v1.1.0
-sudo ./scripts/rollback.sh v1.0.1
+sudo ./scripts/rollback.sh v1.0.4
 ```
 
 数据固定保存在 `/srv/microbio-lab`。`docker compose down` 不会删除数据；不要运行 `./scripts/uninstall.sh --purge-data`，除非确实需要永久清除且已有异机备份。

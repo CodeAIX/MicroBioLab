@@ -1,6 +1,6 @@
 # 医学微生物学虚拟仿真实验平台
 
-可部署到普通 Linux VPS 的 V1 平台，用于安全上传、检查、构建、预览、发布和版本化管理单文件 React JSX 实验。平台软件与实验资产完全解耦；发布后的 `v000001` 等目录保持不可变，回滚只切换数据库中的生效版本。
+可部署到普通 Linux VPS 的 V1 平台，用于安全上传、检查、构建、预览、发布和版本化管理单文件 React JSX 实验。平台软件与实验资产完全解耦；发布后的 `v000001` 等目录保持不可变，回滚只切换数据库中的生效版本。V1.1 增加教学排序、实验介绍页、稳定运行地址与二维码，以及完整的归档删除和封面管理。
 
 ## 架构
 
@@ -53,7 +53,7 @@ npm run test:e2e
 docker compose -f compose.dev.yaml down -v
 ```
 
-该流程真实上传 `samples/enterobacteria/App.jsx`，等待 Builder、发布、检查公共 API、归档恢复，并以 Playwright 检查实验 iframe 和管理员界面。
+该流程真实上传 `samples/enterobacteria/App.jsx`，等待 Builder、发布、检查公共 API、无封面创建、教学排序和归档恢复，并以 Playwright 检查介绍页、二维码、实验 iframe、版本删除和实验永久删除。
 
 ## 环境变量
 
@@ -95,6 +95,8 @@ docker compose exec app node dist/cli/disable-admin.js --email admin@example.com
 
 实验第一次发布后 Slug 锁定。发布旧版本就是回滚，不重建也不删除新版本。默认管理动作是下架或归档；永久删除要求先归档并输入完整 Slug，当前生效版本不能单独删除。
 
+学生首页按后台保存的教学顺序展示。点击实验先进入介绍页，正式实验使用稳定地址 `/experiments/<slug>/run`；二维码也指向该地址，因此后续发布新版不需要重新制作二维码。封面图片可选，不上传时由 Slug 稳定生成主题色块；后台可随时替换或删除封面。
+
 ## CI 与 GHCR
 
 `.github/workflows/ci.yml` 在 push/PR 上运行依赖审计、lint、类型检查、单元/集成测试、所有构建、生产 Compose 校验、两个 Docker 镜像构建、样例闭环、Playwright 和重启持久性检查。
@@ -102,17 +104,17 @@ docker compose exec app node dist/cli/disable-admin.js --email admin@example.com
 推送 `v*` 标签后，`release.yml` 在完整 CI 通过后发布 amd64/arm64 镜像：
 
 ```text
-ghcr.io/<owner>/microbio-lab-app:v1.0.4
-ghcr.io/<owner>/microbio-lab-builder:v1.0.4
+ghcr.io/<owner>/microbio-lab-app:v1.1.0
+ghcr.io/<owner>/microbio-lab-builder:v1.1.0
 ```
 
-同时生成 `1.0`、`1`、`sha-*`，稳定版本更新 `latest`，并创建带 Compose、环境样例、基础设施、脚本和校验和的 GitHub Release。仓库不保存 PAT，Actions 使用最小权限 `GITHUB_TOKEN`。
+同时生成 `1.1`、`1`、`sha-*`，稳定版本更新 `latest`，并创建带 Compose、环境样例、基础设施、脚本和校验和的 GitHub Release。仓库不保存 PAT，Actions 使用最小权限 `GITHUB_TOKEN`。
 
 两个 GHCR Package 均为公开镜像，可匿名拉取：
 
 ```bash
-docker pull ghcr.io/codeaix/microbio-lab-app:v1.0.4
-docker pull ghcr.io/codeaix/microbio-lab-builder:v1.0.4
+docker pull ghcr.io/codeaix/microbio-lab-app:v1.1.0
+docker pull ghcr.io/codeaix/microbio-lab-builder:v1.1.0
 ```
 
 ## VPS 运维
@@ -123,7 +125,7 @@ docker pull ghcr.io/codeaix/microbio-lab-builder:v1.0.4
 ./scripts/healthcheck.sh
 ./scripts/backup.sh
 ./scripts/upgrade.sh v1.1.0
-./scripts/rollback.sh v1.0.0
+./scripts/rollback.sh v1.0.4
 ./scripts/restore.sh /srv/microbio-lab/backups/2026-08-16_120000
 ./scripts/uninstall.sh
 ```

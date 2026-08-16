@@ -44,13 +44,13 @@ export async function removeSourceVersion(experimentId: string, versionId: strin
   await rm(path.join(config.sourceRoot, safeRelativePath(`${experimentId}/${versionId}`)), { recursive: true, force: true });
 }
 
-export async function saveCover(experimentId: string, contents: Buffer): Promise<string> {
+export async function saveCover(contents: Buffer): Promise<string> {
   let extension: string | undefined;
   if (contents.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) extension = ".png";
   else if (contents[0] === 0xff && contents[1] === 0xd8 && contents[2] === 0xff) extension = ".jpg";
   else if (contents.subarray(0, 4).toString("ascii") === "RIFF" && contents.subarray(8, 12).toString("ascii") === "WEBP") extension = ".webp";
   if (!extension) throw new AppError("UPLOAD_INVALID", "封面只支持 PNG、JPEG 或 WebP 图片");
-  const filename = `${experimentId}${extension}`;
+  const filename = `${randomUUID()}${extension}`;
   await writeFile(path.join(config.coverRoot, filename), contents, { flag: "wx", mode: 0o640 });
   return filename;
 }
