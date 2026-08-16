@@ -108,6 +108,13 @@ ghcr.io/<owner>/microbio-lab-builder:v1.0.0
 
 同时生成 `1.0`、`1`、`sha-*`，稳定版本更新 `latest`，并创建带 Compose、环境样例、基础设施、脚本和校验和的 GitHub Release。仓库不保存 PAT，Actions 使用最小权限 `GITHUB_TOKEN`。
 
+两个 GHCR Package 均为公开镜像，可匿名拉取：
+
+```bash
+docker pull ghcr.io/codeaix/microbio-lab-app:v1.0.0
+docker pull ghcr.io/codeaix/microbio-lab-builder:v1.0.0
+```
+
 ## VPS 运维
 
 完整复制粘贴步骤见 [README-VPS.md](README-VPS.md)。常用命令：
@@ -125,7 +132,7 @@ ghcr.io/<owner>/microbio-lab-builder:v1.0.0
 
 ## 安全与故障排查
 
-威胁模型见 [SECURITY.md](SECURITY.md)。宿主机反代样例位于 `docs/nginx-host.example.conf`。
+威胁模型见 [SECURITY.md](SECURITY.md)。推荐由 Cloudflare Tunnel 将两个 HTTPS 域名分别连接到 `http://127.0.0.1:18080` 和 `http://127.0.0.1:18081`，无需在 VPS 安装反向代理。
 
 ```bash
 docker compose ps

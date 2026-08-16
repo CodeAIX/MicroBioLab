@@ -50,6 +50,10 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.tags.outputs.tags_app }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=MicroBio Lab platform application
+            org.opencontainers.image.version=${{ github.ref_name }}
       - name: Build and push builder
         uses: docker/build-push-action@v6
         with:
@@ -58,6 +62,10 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.tags.outputs.tags_builder }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=MicroBio Lab isolated JSX builder
+            org.opencontainers.image.version=${{ github.ref_name }}
       - name: Add latest tags for stable release
         if: steps.tags.outputs.stable == 'true'
         run: |
