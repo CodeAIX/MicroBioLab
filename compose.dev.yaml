@@ -27,8 +27,8 @@ services:
       DATABASE_URL: postgresql://microbio:microbio@db:5432/microbio
       SESSION_SECRET: development-session-secret-at-least-32-chars
       SESSION_SECURE: "false"
-      PLATFORM_ORIGIN: http://localhost:18080
-      EXPERIMENT_ORIGIN: http://localhost:18081
+      PLATFORM_ORIGIN: http://127.0.0.1:18080
+      EXPERIMENT_ORIGIN: http://127.0.0.1:18081
       SOURCE_ROOT: /data/sources
       BUILD_ROOT: /data/builds
       PUBLISHED_ROOT: /data/published
