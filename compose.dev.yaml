@@ -42,7 +42,7 @@ services:
     volumes:
       - dev-sources:/data/sources:ro
       - dev-builds:/data/builds
-    depends_on: { db: { condition: service_healthy } }
+    depends_on: { app: { condition: service_healthy } }
   exp-web:
     image: nginx:1.27-alpine
     ports: ["127.0.0.1:18081:8080"]
