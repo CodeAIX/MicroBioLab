@@ -1,5 +1,13 @@
 name: microbio-lab-dev
 services:
+  init-data:
+    image: alpine:3.22
+    command: ["sh", "-c", "chown -R 1000:1000 /data/sources /data/builds /data/published /data/covers && chmod 0755 /data/sources /data/builds /data/published /data/covers"]
+    volumes:
+      - dev-sources:/data/sources
+      - dev-builds:/data/builds
+      - dev-published:/data/published
+      - dev-covers:/data/covers
   db:
     image: postgres:17-alpine
     environment:
@@ -31,7 +39,9 @@ services:
       - dev-builds:/data/builds
       - dev-published:/data/published
       - dev-covers:/data/covers
-    depends_on: { db: { condition: service_healthy } }
+    depends_on:
+      db: { condition: service_healthy }
+      init-data: { condition: service_completed_successfully }
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 5s
