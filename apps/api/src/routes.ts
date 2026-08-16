@@ -7,7 +7,7 @@ import { config } from "./config.js";
 import { pool, transaction } from "./db.js";
 import { requireAdmin } from "./auth.js";
 import { decodeJsx, publishBuild, removeSourceVersion, saveCover, saveSource } from "./storage.js";
-import { safeRelativePath, sanitizeOriginalFilename } from "./security.js";
+import { newPreviewToken, safeRelativePath, sanitizeOriginalFilename, verifyPreviewToken } from "./security.js";
 
 async function audit(client: { query: (sql: string, values?: unknown[]) => Promise<unknown> }, request: FastifyRequest, action: string, entityType: string, entityId?: string, metadata: object = {}): Promise<void> {
   await client.query("INSERT INTO audit_logs(user_id,action,entity_type,entity_id,metadata) VALUES ($1,$2,$3,$4,$5)", [request.user?.id ?? null, action, entityType, entityId ?? null, JSON.stringify(metadata)]);
@@ -285,8 +285,11 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     return { logs: result.rows };
   });
 
-  app.get("/preview/:versionId/*", { preHandler: requireAdmin }, async (request, reply) => {
+  app.get("/preview/:versionId/*", async (request, reply) => {
     const params = request.params as { versionId: string; "*": string };
+    const query = request.query as { token?: string };
+    const tokenValid = Boolean(query.token && verifyPreviewToken(params.versionId, query.token));
+    if (!request.user && !tokenValid) throw new AppError("AUTH_REQUIRED", "请先登录管理员账户", 401);
     const result = await pool.query("SELECT build_path,status FROM experiment_versions WHERE id=$1", [params.versionId]);
     if (!result.rowCount || result.rows[0]!.status !== "success") throw new AppError("NOT_FOUND", "预览版本不存在", 404);
     const relative = safeRelativePath(params["*"] || "index.html");
@@ -295,8 +298,14 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     const ext = path.extname(fullPath);
     const types: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json" };
     reply.header("Content-Type", types[ext] ?? "application/octet-stream");
+    reply.header("Cache-Control", "private, no-store");
     reply.header("Access-Control-Allow-Origin", "*");
     reply.header("Content-Security-Policy", "default-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; img-src 'self' data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com");
+    if (ext === ".html") {
+      const token = tokenValid ? query.token! : newPreviewToken(params.versionId);
+      const html = content.toString("utf8").replace(/src="\.\/([^"?#]+)"/g, (_match, asset: string) => `src="./${asset}?token=${encodeURIComponent(token)}"`);
+      return reply.send(html);
+    }
     return reply.send(content);
   });
 }

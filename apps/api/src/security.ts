@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { AppError } from "@microbio/shared";
 import { config } from "./config.js";
 
@@ -6,6 +6,20 @@ export const SESSION_COOKIE = "microbio_session";
 export const sha256 = (data: Buffer | string): string => createHash("sha256").update(data).digest("hex");
 export const newSessionToken = (): string => randomBytes(32).toString("base64url");
 export const hashSessionToken = (token: string): string => createHmac("sha256", config.sessionSecret).update(token).digest("hex");
+
+export function newPreviewToken(versionId: string, expiresAt = Math.floor(Date.now() / 1000) + 300): string {
+  const signature = createHmac("sha256", config.sessionSecret).update(`preview:${versionId}:${expiresAt}`).digest("hex");
+  return `${expiresAt}.${signature}`;
+}
+
+export function verifyPreviewToken(versionId: string, token: string, now = Math.floor(Date.now() / 1000)): boolean {
+  const [rawExpires, signature, extra] = token.split(".");
+  if (extra !== undefined || !rawExpires || !signature || !/^\d+$/.test(rawExpires) || !/^[0-9a-f]{64}$/.test(signature)) return false;
+  const expiresAt = Number(rawExpires);
+  if (!Number.isSafeInteger(expiresAt) || expiresAt < now || expiresAt > now + 600) return false;
+  const expected = createHmac("sha256", config.sessionSecret).update(`preview:${versionId}:${expiresAt}`).digest("hex");
+  return timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+}
 
 export function safeRelativePath(value: string): string {
   if (!value || value.includes("\\") || value.startsWith("/") || value.split("/").includes("..")) {
