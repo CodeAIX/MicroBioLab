@@ -242,7 +242,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/experiments", { preHandler: requireAdmin }, async () => {
     const result = await pool.query(
       `SELECT e.*,v.version_number AS active_version_number,v.source_sha256 AS active_source_sha256,
-       v.created_at AS active_version_created_at,v.published_at AS active_version_published_at,
+       v.published_at AS active_version_published_at,
        (SELECT count(*)::int FROM experiment_versions ev WHERE ev.experiment_id=e.id) AS version_count
        FROM experiments e LEFT JOIN experiment_versions v ON v.id=e.active_version_id ORDER BY e.display_order,e.created_at`,
     );

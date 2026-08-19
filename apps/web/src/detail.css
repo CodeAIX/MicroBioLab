@@ -1,0 +1,163 @@
+.experiment-detail-page .panel-heading h2 {
+  font-size: 19px;
+}
+
+.experiment-detail-page .panel-heading p,
+.experiment-detail-page .edit-form label,
+.experiment-detail-page .detail-summary,
+.experiment-detail-page .knowledge-empty,
+.experiment-detail-page .knowledge-file small {
+  font-size: 13px;
+}
+
+.experiment-detail-page .edit-form input,
+.experiment-detail-page .edit-form textarea,
+.experiment-detail-page .knowledge-manager input,
+.experiment-detail-page .cover-manager input {
+  font-size: 14px;
+}
+
+.version-history-panel {
+  padding: 20px;
+}
+
+.version-history-panel > .panel-heading {
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.version-history-panel .inline-upload input {
+  font-size: 13px;
+}
+
+.version-list {
+  gap: 10px;
+}
+
+.version-list article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  padding: 15px 17px;
+}
+
+.version-card-content {
+  min-width: 0;
+}
+
+.version-head strong {
+  font-size: 18px;
+  letter-spacing: .01em;
+}
+
+.version-head .current,
+.version-head .published-once {
+  font-size: 11px;
+}
+
+.version-list dl {
+  grid-template-columns: minmax(260px, 2fr) minmax(90px, .5fr) minmax(90px, .5fr) minmax(400px, 1.4fr);
+  gap: 12px 28px;
+  margin: 11px 0 0;
+}
+
+.version-list dt {
+  margin-bottom: 5px;
+  font-size: 12px;
+}
+
+.version-list dd {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.version-times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 12px;
+  line-height: 1.55;
+  white-space: normal !important;
+  font-family: inherit !important;
+}
+
+.version-times span {
+  white-space: nowrap;
+}
+
+.version-card-side {
+  display: flex;
+  min-width: 210px;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.version-card-side .status {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.version-actions {
+  flex-wrap: wrap;
+  max-width: 300px;
+}
+
+.version-actions button {
+  padding: 8px 11px;
+  font-size: 13px;
+}
+
+@media (max-width: 1250px) {
+  .version-list dl {
+    grid-template-columns: minmax(240px, 1.7fr) 1fr 1fr;
+  }
+
+  .version-list dl > div:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 900px) {
+  .version-list article {
+    grid-template-columns: 1fr;
+  }
+
+  .version-card-side {
+    min-width: 0;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .version-list dl {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .version-list dl > div:last-child {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 620px) {
+  .version-history-panel {
+    padding: 16px;
+  }
+
+  .version-list dl {
+    grid-template-columns: 1fr;
+  }
+
+  .version-card-side {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .version-actions {
+    max-width: none;
+    justify-content: stretch;
+  }
+
+  .version-actions button {
+    flex: 1;
+  }
+}

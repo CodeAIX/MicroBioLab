@@ -29,11 +29,19 @@ test("administrator can log in and preview the immutable version", async ({ page
   await page.getByRole("button", { name: "登录" }).click();
   await expect(page.getByRole("heading", { name: "控制台" })).toBeVisible();
   await page.getByRole("link", { name: "▤ 实验管理", exact: true }).click();
+  await expect(page.getByRole("columnheader", { name: "最新版更新", exact: true })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "精确时间", exact: true })).toHaveCount(0);
+  await expect(page.getByText("版本首发", { exact: false })).toHaveCount(0);
+  await expect(page.getByText("模块更新", { exact: false })).toHaveCount(0);
   await page.getByRole("row").filter({ hasText: "肠道杆菌的分离培养与生化鉴定" }).getByRole("link", { name: "管理 →", exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/experiments\/[0-9a-f-]+$/);
   await expect(page.getByText("KnowledgeReview.md", { exact: true })).toBeVisible();
   const originalVersion = page.locator(".version-list article").filter({ hasText: "v000001" });
   await expect(originalVersion.getByText("v000001", { exact: true })).toBeVisible();
+  await expect(originalVersion).toHaveCSS("display", "grid");
+  await expect(originalVersion.locator("dt").first()).toHaveCSS("font-size", "12px");
+  await expect(originalVersion.locator("dd").first()).toHaveCSS("font-size", "13px");
+  await expect(originalVersion.locator(".version-card-side")).toBeVisible();
   await originalVersion.getByRole("button", { name: "预览", exact: true }).click();
   const frame = page.frameLocator('iframe[title="管理员预览"]');
   await expect(frame.getByText("肠道杆菌的分离培养与生化鉴定").first()).toBeVisible();
@@ -67,7 +75,10 @@ test("administrator can preflight and atomically publish a JSX directory", async
   await page.getByRole("link", { name: "▤ 实验管理", exact: true }).click();
   await page.getByRole("button", { name: "批量更新 JSX", exact: true }).click();
 
-  await page.getByLabel("选择包含多个实验包的目录").setInputFiles(path.resolve("tests/fixtures/batch-next"));
+  const directoryPicker = page.getByLabel("选择包含多个实验包的目录");
+  await expect(directoryPicker).toBeVisible();
+  await expect(directoryPicker.locator("xpath=..")).toHaveCSS("flex-direction", "column");
+  await directoryPicker.setInputFiles(path.resolve("tests/fixtures/batch-next"));
   const batchDialog = page.getByRole("dialog", { name: "批量更新 JSX" });
   await expect(batchDialog.getByText("预检完成：2 个可更新", { exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText("无匹配实验", { exact: true })).toHaveCount(0);

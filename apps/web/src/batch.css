@@ -5,7 +5,6 @@
   gap: 8px;
 }
 
-.time-cell,
 .batch-history-list > button > span:first-child {
   display: flex;
   flex-direction: column;
@@ -17,7 +16,6 @@
   font-size: 11px;
 }
 
-.time-cell small,
 .batch-history-list small,
 .batch-summary > span,
 .batch-summary small,
@@ -91,8 +89,42 @@
 .management-modal-card > header .eyebrow { margin-bottom: 4px; }
 .management-modal-card > header button { font-size: 26px; background: transparent; border: 0; }
 .management-modal-body { padding: 20px; overflow: auto; }
-.batch-picker { max-width: 700px; margin: auto; }
-.batch-picker input { margin-top: 12px; }
+.batch-picker {
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.batch-directory-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  padding: 22px;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  background: #f7fbfa;
+  border: 1px dashed #a9c5bf;
+  border-radius: 10px;
+}
+
+.batch-directory-picker input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 10px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.batch-directory-picker span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.6;
+}
 
 .batch-summary {
   display: flex;
@@ -133,16 +165,9 @@
 
 .danger-button { color: white; background: var(--red); border-color: var(--red); }
 .text-danger { color: var(--red); }
-.version-list dl { grid-template-columns: 2fr 1fr 1fr 1.5fr; }
-.version-times { line-height: 1.55; white-space: normal !important; font-family: inherit !important; }
-
-@media (max-width: 1050px) {
-  .version-list dl { grid-template-columns: 1fr 1fr; }
-}
 
 @media (max-width: 760px) {
   .page-header { flex-direction: column; align-items: stretch; }
   .header-actions { justify-content: flex-start; }
   .batch-summary { align-items: flex-start; flex-direction: column; }
-  .version-list dl { grid-template-columns: 1fr; }
 }

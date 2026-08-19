@@ -2,7 +2,7 @@
 
 可部署到普通 Linux VPS 的医学微生物学虚拟仿真实验平台，用于安全上传、检查、构建、预览、发布和版本化管理单文件 React JSX 实验，并为每个实验配置 Markdown 知识点复习。平台软件与实验资产完全解耦；发布后的 `v000001` 等目录保持不可变，回滚只切换数据库中的生效版本。
 
-当前稳定版：[`v1.4.0`](https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.4.0)
+当前稳定版：[`v1.5.0`](https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.5.0)
 
 主要能力：
 
@@ -12,15 +12,15 @@
 - 实验级 Markdown 知识点复习、按需加载的悬浮阅读页；
 - 按 Slug 从目录及子目录批量预检、构建和整体发布 JSX；
 - 可选封面、自动主题背景、实验删除与安全批量清理未发布版本；
-- 管理端显示精确到秒的上传、构建、发布和模块更新时间；
+- 管理端批量更新弹窗与实验详情页采用更紧凑、清晰的布局，列表仅显示当前生效版本的精确发布时间；
 - Docker Compose、完整备份/恢复、升级/回滚和分级卸载；
 - 公开 GHCR 多架构镜像，可匿名拉取。
 
 ## 快速部署
 
 ```bash
-docker pull ghcr.io/codeaix/microbio-lab-app:v1.4.0
-docker pull ghcr.io/codeaix/microbio-lab-builder:v1.4.0
+docker pull ghcr.io/codeaix/microbio-lab-app:v1.5.0
+docker pull ghcr.io/codeaix/microbio-lab-builder:v1.5.0
 ```
 
 镜像只负责 App/Builder，完整部署还需要仓库中的 `compose.yaml`、`.env`、PostgreSQL 和实验静态站。请按 [VPS 部署与运维](README-VPS.md) 完成安装，不要直接手写 `docker run`。
@@ -28,7 +28,7 @@ docker pull ghcr.io/codeaix/microbio-lab-builder:v1.4.0
 已安装 Docker Engine 与 Compose Plugin 的全新 VPS 可下载不可变标签中的引导式部署脚本；脚本会继续下载并校验正式 Release，而不是直接使用 `main`：
 
 ```bash
-INSTALL_VERSION="v1.4.0"
+INSTALL_VERSION="v1.5.0"
 curl -fL "https://raw.githubusercontent.com/CodeAIX/MicroBioLab/${INSTALL_VERSION}/scripts/bootstrap.sh" -o /tmp/microbio-bootstrap.sh
 sudo bash /tmp/microbio-bootstrap.sh "$INSTALL_VERSION"
 ```
@@ -159,17 +159,17 @@ docker compose exec app node dist/cli/disable-admin.js --email admin@example.com
 推送 `v*` 标签后，`release.yml` 在完整 CI 通过后发布 amd64/arm64 镜像：
 
 ```text
-ghcr.io/<owner>/microbio-lab-app:v1.4.0
-ghcr.io/<owner>/microbio-lab-builder:v1.4.0
+ghcr.io/<owner>/microbio-lab-app:v1.5.0
+ghcr.io/<owner>/microbio-lab-builder:v1.5.0
 ```
 
-同时生成 `1.4`、`1`、`sha-*`，稳定版本更新 `latest`，并创建带 Compose、环境样例、基础设施、脚本和校验和的 GitHub Release。仓库不保存 PAT，Actions 使用最小权限 `GITHUB_TOKEN`。
+同时生成 `1.5`、`1`、`sha-*`，稳定版本更新 `latest`，并创建带 Compose、环境样例、基础设施、脚本和校验和的 GitHub Release。仓库不保存 PAT，Actions 使用最小权限 `GITHUB_TOKEN`。
 
 两个 GHCR Package 均为公开镜像，可匿名拉取：
 
 ```bash
-docker pull ghcr.io/codeaix/microbio-lab-app:v1.4.0
-docker pull ghcr.io/codeaix/microbio-lab-builder:v1.4.0
+docker pull ghcr.io/codeaix/microbio-lab-app:v1.5.0
+docker pull ghcr.io/codeaix/microbio-lab-builder:v1.5.0
 ```
 
 ## VPS 运维
@@ -188,7 +188,7 @@ sudo mbl health
 sudo mbl logs app
 sudo mbl backup
 sudo mbl storage
-sudo mbl upgrade v1.4.0
+sudo mbl upgrade v1.5.0
 sudo mbl uninstall
 sudo mbl help
 ```

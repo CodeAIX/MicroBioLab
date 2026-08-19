@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 if [[ $# -ne 1 || ! "$1" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]; then
-  echo "用法：$0 v1.4.0" >&2
+  echo "用法：$0 v1.5.0" >&2
   exit 1
 fi
 if [[ "${EUID}" -ne 0 ]]; then

@@ -32,8 +32,8 @@ BOOTSTRAP_HELP="$($REPO_DIR/scripts/bootstrap.sh --help)"
 [[ "$BOOTSTRAP_HELP" == *"sudo bash bootstrap.sh"* ]]
 
 VERSION_OUTPUT="$($TEST_ROOT/deploy/scripts/manage.sh version)"
-[[ "$VERSION_OUTPUT" == *"平台版本：v1.4.0"* ]]
-[[ "$VERSION_OUTPUT" == *"Builder： v1.4.0"* ]]
+[[ "$VERSION_OUTPUT" == *"平台版本：v1.5.0"* ]]
+[[ "$VERSION_OUTPUT" == *"Builder： v1.5.0"* ]]
 
 "$TEST_ROOT/deploy/scripts/manage.sh" status
 [[ "$(tail -n1 "$DOCKER_LOG")" == "compose ps" ]]

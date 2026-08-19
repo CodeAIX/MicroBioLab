@@ -7,18 +7,25 @@
 - 仓库：`https://github.com/CodeAIX/MicroBioLab`
 - 可见性：Public
 - 默认分支：`main`
-- 当前发布：`v1.4.0`
-- 发布源码：annotated tag `v1.4.0`，提交 `1ce871953aea312c0f7de39d7deb54035a88bd1b`
-- GitHub Release：`https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.4.0`
-- 主镜像：`ghcr.io/codeaix/microbio-lab-app:v1.4.0`
-- Builder 镜像：`ghcr.io/codeaix/microbio-lab-builder:v1.4.0`
+- 当前发布：`v1.5.0`
+- 发布源码：annotated tag `v1.5.0`
+- GitHub Release：`https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.5.0`
+- 主镜像：`ghcr.io/codeaix/microbio-lab-app:v1.5.0`
+- Builder 镜像：`ghcr.io/codeaix/microbio-lab-builder:v1.5.0`
 - 镜像架构：`linux/amd64`、`linux/arm64`
 - 许可证：MIT
 - Node.js：24+
 - PostgreSQL：17
 - 生产部署：Docker Compose + Cloudflare Tunnel，无宿主机反向代理
 
-v1.4.0 发布内容：
+v1.5.0 发布内容：
+
+- 修复批量更新 JSX 弹窗的目录选择控件与提示文字错位；
+- 实验列表的时间列仅显示当前生效版本的精确发布时间；
+- 压缩实验详情页与版本卡片布局，集中状态和操作区并提高关键字号；
+- 不新增数据库迁移，知识点复习继续使用安全 Markdown 代码块渲染。
+
+v1.4.0 历史发布内容：
 
 - 从目录及子目录按 Slug 批量预检、上传和构建 JSX；
 - 持久化批次状态与全成功后的一次性事务发布；
@@ -37,7 +44,7 @@ Builder：    sha256:d4efda078acf155b52a97a688615e03d955c78a6c7fa97629e688c20363
 Release tar.gz SHA256：e3aac13540b1b55e9d7631d1704f7b80976a2a8fb755b73d1e8f49d4602493b1
 ```
 
-两个 v1.4.0 镜像均已通过匿名 Registry 请求验证，并同时包含 `linux/amd64` 和 `linux/arm64`。Release 不是 draft/prerelease，下载后的部署归档已通过 `SHA256SUMS` 校验，且正式中文 Release 说明已更新。以下 v1.3.0 信息作为上一稳定版历史基线保留。
+两个 v1.4.0 镜像均已通过匿名 Registry 请求验证，并同时包含 `linux/amd64` 和 `linux/arm64`。Release 不是 draft/prerelease，下载后的部署归档已通过 `SHA256SUMS` 校验，且正式中文 Release 说明已更新。以下 v1.3.0 信息继续作为历史基线保留。
 
 v1.3.0 已验证的发布状态：
 
@@ -103,7 +110,7 @@ OpenSSL 3.0.13
 数据目录：/srv/microbio-lab
 ```
 
-最后一次已知健康检查中四个服务均正常。用户尚未提供 VPS 升级到 v1.4.0 后的输出，因此不能假设生产环境已经升级；新会话应先让用户执行：
+最后一次已知健康检查中四个服务均正常。用户尚未提供 VPS 升级到 v1.5.0 后的输出，因此不能假设生产环境已经升级；新会话应先让用户执行：
 
 ```bash
 cd /opt/microbio-lab
@@ -127,7 +134,7 @@ VPS 曾对 `compose.yaml` 的 Nginx tmpfs 权限做过本地修正；该修正�
 - 单独删除未发布版本，以及只覆盖安全候选的批量清理与空间估算；
 - 从目录及子目录按 `<slug>-vsim.jsx` / `<slug>.jsx` 批量预检和创建版本；
 - 批次构建状态持久化，并在全成功且无并发版本变化时整体发布；
-- 实验列表、批次和版本历史显示精确日期时间；
+- 实验列表仅显示当前生效版本的精确发布时间；批次和版本历史保留完整精确时间；
 - 归档后输入完整 Slug 永久删除实验及关联文件；
 - 自定义教学顺序；
 - 学生首页、实验介绍页和稳定运行地址；
@@ -279,7 +286,7 @@ GitHub CI 成功标准：
 2. 本地执行全部非 Docker 检查；
 3. 提交并推送 `main`；
 4. 等待 `main` CI 全绿；
-5. 使用新的版本号创建 annotated tag，例如 `NEXT_VERSION="v1.4.0"` 后执行 `git tag -a "$NEXT_VERSION" -m "MicroBio Lab $NEXT_VERSION"`；
+5. 使用新的版本号创建 annotated tag，例如 `NEXT_VERSION="v1.5.0"` 后执行 `git tag -a "$NEXT_VERSION" -m "MicroBio Lab $NEXT_VERSION"`；
 6. 推送标签，等待 Release 工作流；
 7. 验证 GitHub Release 不是 draft/prerelease；
 8. 使用未登录请求验证两个 GHCR manifest 返回 HTTP 200；
@@ -322,6 +329,7 @@ v1.4.0 Release 资产 `microbio-lab-v1.4.0.tar.gz` 的 SHA256 为 `e3aac13540b1b
 - `v1.2.0`：实验级 Markdown 知识点复习、管理端维护、学生详情页悬浮阅读与安全按需渲染。
 - `v1.3.0`：`mbl` 中文交互维护菜单、分级卸载、参数模式、Release 感知升级入口和 VPS 引导式部署。
 - `v1.4.0`：目录批量更新 JSX、全成功后事务整体发布、安全批量清理、精确时间与 `mbl storage`。
+- `v1.5.0`：修复批量目录选择布局，精简实验列表时间列，并压缩实验详情与版本卡片布局、增大关键字号。
 
 ## 12. 凭据与外部状态
 

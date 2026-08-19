@@ -52,7 +52,7 @@ confirm() {
 
 validate_version() {
   if [[ ! "$1" =~ $VERSION_PATTERN ]]; then
-    echo "版本格式无效：$1；应类似 v1.4.0" >&2
+    echo "版本格式无效：$1；应类似 v1.5.0" >&2
     return 1
   fi
 }
@@ -60,7 +60,7 @@ validate_version() {
 prompt_version() {
   local action="$1"
   local version
-  read -r -p "请输入要${action}的版本（例如 v1.4.0）：" version
+  read -r -p "请输入要${action}的版本（例如 v1.5.0）：" version
   validate_version "$version" || return 1
   printf '%s\n' "$version"
 }
