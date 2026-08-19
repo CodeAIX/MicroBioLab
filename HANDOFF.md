@@ -7,8 +7,8 @@
 - 仓库：`https://github.com/CodeAIX/MicroBioLab`
 - 可见性：Public
 - 默认分支：`main`
-- 当前发布目标：`v1.4.0`
-- 发布源码：annotated tag `v1.4.0`（发布前以最终提交补录）
+- 当前发布：`v1.4.0`
+- 发布源码：annotated tag `v1.4.0`；以 tag 指向的完整提交为唯一发布源码
 - GitHub Release：`https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.4.0`
 - 主镜像：`ghcr.io/codeaix/microbio-lab-app:v1.4.0`
 - Builder 镜像：`ghcr.io/codeaix/microbio-lab-builder:v1.4.0`
@@ -27,7 +27,7 @@ v1.4.0 发布内容：
 - `mbl storage` 存储占用入口；
 - 数据库迁移 `004_batch_updates.sql` 及完整回归测试。
 
-v1.4.0 发布验证状态将在 tag 工作流、镜像和 Release 资产完成后补录。以下 v1.3.0 信息作为上一稳定版历史基线保留。
+v1.4.0 的 CI、镜像索引与 Release 资产校验值会在发布完成后记录到 `main`；tag 内本文保留这一说明，不回写或替换已发布归档。以下 v1.3.0 信息作为上一稳定版历史基线保留。
 
 v1.3.0 已验证的发布状态：
 
