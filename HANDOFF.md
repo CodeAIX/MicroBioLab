@@ -8,7 +8,7 @@
 - 可见性：Public
 - 默认分支：`main`
 - 当前发布：`v1.5.0`
-- 发布源码：annotated tag `v1.5.0`
+- 发布源码：annotated tag `v1.5.0`，提交 `23e32132a4ceca4d6b5ef5d0cb15df6e528a6a3d`
 - GitHub Release：`https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.5.0`
 - 主镜像：`ghcr.io/codeaix/microbio-lab-app:v1.5.0`
 - Builder 镜像：`ghcr.io/codeaix/microbio-lab-builder:v1.5.0`
@@ -24,6 +24,18 @@ v1.5.0 发布内容：
 - 实验列表的时间列仅显示当前生效版本的精确发布时间；
 - 压缩实验详情页与版本卡片布局，集中状态和操作区并提高关键字号；
 - 不新增数据库迁移，知识点复习继续使用安全 Markdown 代码块渲染。
+
+v1.5.0 已验证的发布状态：
+
+```text
+main CI：    https://github.com/CodeAIX/MicroBioLab/actions/runs/32252799084（success）
+Release CI： https://github.com/CodeAIX/MicroBioLab/actions/runs/32253223258（success）
+App index：  sha256:1d3480e7480a3e5be4ab4844a2fa41e61fc121265d05baf72ccf8dd07e871675
+Builder：    sha256:d966f967a4316bf7d0cfeea7a2bf9e1db7dee00b1192c42006a3a288edf8436f
+Release tar.gz SHA256：6ff2d821b1d092e5fad220128ebf0aaa9a67e2cb91a3b3fe27ea32690196bb0c
+```
+
+两个 v1.5.0 镜像均已通过匿名 Registry 请求验证，并同时包含 `linux/amd64` 和 `linux/arm64`。Release 不是 draft/prerelease，下载后的部署归档已通过 `SHA256SUMS` 校验，正式中文 Release 说明已更新。
 
 v1.4.0 历史发布内容：
 
@@ -302,6 +314,8 @@ v1.2.0 Release 资产 `microbio-lab-v1.2.0.tar.gz` 的 SHA256 为 `7d855194c2424
 v1.3.0 Release 资产 `microbio-lab-v1.3.0.tar.gz` 的 SHA256 为 `1ac2b1ef24c7e31ef0d204e0a936bf40c01a85a3ce1e7aa0d48d1fe43af46ffa`。发布后维护元数据只提交到 `main`，不得回写或替换 v1.3.0 Release。
 
 v1.4.0 Release 资产 `microbio-lab-v1.4.0.tar.gz` 的 SHA256 为 `e3aac13540b1b55e9d7631d1704f7b80976a2a8fb755b73d1e8f49d4602493b1`。发布后维护元数据只提交到 `main`，不得回写或替换 v1.4.0 Release。
+
+v1.5.0 Release 资产 `microbio-lab-v1.5.0.tar.gz` 的 SHA256 为 `6ff2d821b1d092e5fad220128ebf0aaa9a67e2cb91a3b3fe27ea32690196bb0c`。发布后维护元数据只提交到 `main`，不得回写或替换 v1.5.0 Release。
 
 ## 10. 运维原则
 
