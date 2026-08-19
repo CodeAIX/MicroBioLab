@@ -13,6 +13,12 @@ test("published sample opens inside the sandboxed experiment frame", async ({ pa
   const review = page.getByRole("dialog", { name: /肠道杆菌的分离培养与生化鉴定/ });
   await expect(review.getByRole("heading", { name: /知识点复习 · 肠道杆菌/ })).toBeVisible();
   await expect(review.getByText("核心判断", { exact: true })).toBeVisible();
+  const regularTable = review.locator("table").first();
+  const wideTable = review.locator("table").filter({ has: review.getByText("关键记忆点", { exact: true }) });
+  await expect(regularTable).toHaveCSS("display", "block");
+  await expect(wideTable).toHaveCSS("display", "table");
+  const wideTableWidth = await wideTable.evaluate((table) => ({ client: table.clientWidth, scroll: table.scrollWidth }));
+  expect(wideTableWidth.scroll).toBeLessThanOrEqual(wideTableWidth.client + 1);
   await review.getByRole("button", { name: "复习完成" }).click();
   await expect(review).toHaveCount(0);
   await page.getByRole("link", { name: /开始虚拟实验/ }).click();

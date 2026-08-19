@@ -7,18 +7,25 @@
 - 仓库：`https://github.com/CodeAIX/MicroBioLab`
 - 可见性：Public
 - 默认分支：`main`
-- 当前发布：`v1.5.0`
-- 发布源码：annotated tag `v1.5.0`，提交 `23e32132a4ceca4d6b5ef5d0cb15df6e528a6a3d`
-- GitHub Release：`https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.5.0`
-- 主镜像：`ghcr.io/codeaix/microbio-lab-app:v1.5.0`
-- Builder 镜像：`ghcr.io/codeaix/microbio-lab-builder:v1.5.0`
+- 当前发布：`v1.5.1`
+- 发布源码：annotated tag `v1.5.1`
+- GitHub Release：`https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.5.1`
+- 主镜像：`ghcr.io/codeaix/microbio-lab-app:v1.5.1`
+- Builder 镜像：`ghcr.io/codeaix/microbio-lab-builder:v1.5.1`
 - 镜像架构：`linux/amd64`、`linux/arm64`
 - 许可证：MIT
 - Node.js：24+
 - PostgreSQL：17
 - 生产部署：Docker Compose + Cloudflare Tunnel，无宿主机反向代理
 
-v1.5.0 发布内容：
+v1.5.1 发布内容：
+
+- 知识点复习中的 8 列及以上宽表在桌面端自动适配内容区宽度并换行；
+- 普通表格保持既有布局，小屏幕宽表继续横向滚动；
+- 弹窗尺寸、标题区、正文排版和知识点 Markdown 数据均不变；
+- 不新增数据库迁移，并增加宽表与普通表差异化布局的浏览器回归测试。
+
+v1.5.0 历史发布内容：
 
 - 修复批量更新 JSX 弹窗的目录选择控件与提示文字错位；
 - 实验列表的时间列仅显示当前生效版本的精确发布时间；
@@ -122,7 +129,7 @@ OpenSSL 3.0.13
 数据目录：/srv/microbio-lab
 ```
 
-最后一次已知健康检查中四个服务均正常。用户尚未提供 VPS 升级到 v1.5.0 后的输出，因此不能假设生产环境已经升级；新会话应先让用户执行：
+最后一次已知健康检查中四个服务均正常。用户尚未提供 VPS 升级到 v1.5.1 后的输出，因此不能假设生产环境已经升级；新会话应先让用户执行：
 
 ```bash
 cd /opt/microbio-lab
@@ -298,7 +305,7 @@ GitHub CI 成功标准：
 2. 本地执行全部非 Docker 检查；
 3. 提交并推送 `main`；
 4. 等待 `main` CI 全绿；
-5. 使用新的版本号创建 annotated tag，例如 `NEXT_VERSION="v1.5.0"` 后执行 `git tag -a "$NEXT_VERSION" -m "MicroBio Lab $NEXT_VERSION"`；
+5. 使用新的版本号创建 annotated tag，例如 `NEXT_VERSION="v1.5.1"` 后执行 `git tag -a "$NEXT_VERSION" -m "MicroBio Lab $NEXT_VERSION"`；
 6. 推送标签，等待 Release 工作流；
 7. 验证 GitHub Release 不是 draft/prerelease；
 8. 使用未登录请求验证两个 GHCR manifest 返回 HTTP 200；
@@ -344,6 +351,7 @@ v1.5.0 Release 资产 `microbio-lab-v1.5.0.tar.gz` 的 SHA256 为 `6ff2d821b1d09
 - `v1.3.0`：`mbl` 中文交互维护菜单、分级卸载、参数模式、Release 感知升级入口和 VPS 引导式部署。
 - `v1.4.0`：目录批量更新 JSX、全成功后事务整体发布、安全批量清理、精确时间与 `mbl storage`。
 - `v1.5.0`：修复批量目录选择布局，精简实验列表时间列，并压缩实验详情与版本卡片布局、增大关键字号。
+- `v1.5.1`：知识点复习宽表在桌面端自动适配内容区，普通表与小屏幕滚动行为保持稳定。
 
 ## 12. 凭据与外部状态
 
