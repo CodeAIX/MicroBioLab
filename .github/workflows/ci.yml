@@ -19,7 +19,8 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-      - run: bash -n scripts/*.sh tests/integration/*.sh
+      - run: bash -n scripts/*.sh tests/integration/*.sh tests/scripts/*.sh
+      - run: ./tests/scripts/manage-command.sh
 
   containers-and-e2e:
     runs-on: ubuntu-latest

@@ -17,6 +17,11 @@ done
 
 if [[ ! -f .env ]]; then echo "缺少 $PROJECT_DIR/.env" >&2; exit 1; fi
 set -a; source .env; set +a
+if [[ "$PURGE_DATA" == true ]]; then
+  if [[ "${DATA_ROOT:-}" != "/srv/microbio-lab" ]]; then echo "拒绝清理非标准目录" >&2; exit 1; fi
+  read -r -p "这将永久删除 /srv/microbio-lab。输入 PURGE-MICROBIO-LAB：" CONFIRM
+  if [[ "$CONFIRM" != "PURGE-MICROBIO-LAB" ]]; then echo "已取消，平台和数据均未更改"; exit 1; fi
+fi
 docker compose down --remove-orphans
 
 if [[ "$REMOVE_IMAGES" == true ]]; then
@@ -32,8 +37,5 @@ if [[ "$PURGE_DATA" == false ]]; then
   echo "平台容器和网络已移除，$DATA_ROOT 数据与 $PROJECT_DIR 配置均已保留。"
   exit 0
 fi
-if [[ "${DATA_ROOT:-}" != "/srv/microbio-lab" ]]; then echo "拒绝清理非标准目录" >&2; exit 1; fi
-read -r -p "这将永久删除 /srv/microbio-lab。输入 PURGE-MICROBIO-LAB：" CONFIRM
-if [[ "$CONFIRM" != "PURGE-MICROBIO-LAB" ]]; then echo "已取消，数据仍保留"; exit 1; fi
 rm -rf -- /srv/microbio-lab
 echo "永久数据已删除，无法从本机恢复；部署配置仍保留在 $PROJECT_DIR。"

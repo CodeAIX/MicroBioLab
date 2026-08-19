@@ -7,18 +7,26 @@
 - 仓库：`https://github.com/CodeAIX/MicroBioLab`
 - 可见性：Public
 - 默认分支：`main`
-- 当前发布：`v1.2.0`
-- 发布源码提交：`6584d75c30d8abd9c9d4af9e5f1b9b546962e381`
-- GitHub Release：`https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.2.0`
-- 主镜像：`ghcr.io/codeaix/microbio-lab-app:v1.2.0`
-- Builder 镜像：`ghcr.io/codeaix/microbio-lab-builder:v1.2.0`
+- 当前发布：`v1.3.0`
+- 发布源码：annotated tag `v1.3.0`（精确提交与发布校验值在 Release 完成后回填 `main`）
+- GitHub Release：`https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.3.0`
+- 主镜像：`ghcr.io/codeaix/microbio-lab-app:v1.3.0`
+- Builder 镜像：`ghcr.io/codeaix/microbio-lab-builder:v1.3.0`
 - 镜像架构：`linux/amd64`、`linux/arm64`
 - 许可证：MIT
 - Node.js：24+
 - PostgreSQL：17
 - 生产部署：Docker Compose + Cloudflare Tunnel，无宿主机反向代理
 
-v1.2.0 已验证的发布状态：
+v1.3.0 发布内容：
+
+- `mbl` 中文交互维护菜单与参数模式；
+- 固定版本、校验 Release、拒绝覆盖既有数据的 VPS 引导式部署；
+- Release 感知的标准升级、分级卸载与永久删除双重确认；
+- 安装和升级时自动注册 `/usr/local/bin/mbl`；
+- CI 增加维护命令回归测试。
+
+v1.2.0 已验证的历史发布状态：
 
 ```text
 main CI：    https://github.com/CodeAIX/MicroBioLab/actions/runs/32202513867（success）
@@ -72,7 +80,7 @@ OpenSSL 3.0.13
 数据目录：/srv/microbio-lab
 ```
 
-最后一次已知健康检查中四个服务均正常。用户尚未提供 VPS 升级到 v1.2.0 后的输出，因此不能假设生产环境已经升级；新会话应先让用户执行：
+最后一次已知健康检查中四个服务均正常。用户尚未提供 VPS 升级到 v1.3.0 后的输出，因此不能假设生产环境已经升级；新会话应先让用户执行：
 
 ```bash
 cd /opt/microbio-lab
@@ -101,7 +109,7 @@ VPS 曾对 `compose.yaml` 的 Nginx tmpfs 权限做过本地修正；该修正�
 - 可选封面、自动主题色块、封面替换和删除；
 - 实验级 Markdown 知识点复习，新建时可选上传、后续独立替换或删除；
 - PostgreSQL 增量迁移；
-- Docker Compose、备份、恢复、升级、回滚、卸载脚本；
+- Docker Compose、引导式 VPS 部署、备份、恢复、升级、回滚、分级卸载脚本和 `mbl` 统一维护菜单；
 - GitHub CI、GHCR 多架构镜像和 GitHub Release。
 
 明确不在 V1 范围：
@@ -129,7 +137,7 @@ packages/shared          Slug、版本格式、错误类型等共享代码
 db/migrations            顺序执行的 PostgreSQL 增量迁移
 infra/docker             App/Builder Dockerfile
 infra/exp-nginx          只读实验静态站配置
-scripts                  安装、健康、备份、恢复、升级、回滚、卸载
+scripts                  引导部署、安装、统一维护菜单、健康、备份、恢复、升级、回滚、卸载
 tests/integration        真实 API/Builder/发布闭环
 tests/e2e                Playwright 浏览器测试
 samples                  永久测试 fixture
@@ -245,7 +253,7 @@ GitHub CI 成功标准：
 2. 本地执行全部非 Docker 检查；
 3. 提交并推送 `main`；
 4. 等待 `main` CI 全绿；
-5. 使用新的版本号创建 annotated tag，例如 `NEXT_VERSION="v1.2.0"` 后执行 `git tag -a "$NEXT_VERSION" -m "MicroBio Lab $NEXT_VERSION"`；
+5. 使用新的版本号创建 annotated tag，例如 `NEXT_VERSION="v1.3.0"` 后执行 `git tag -a "$NEXT_VERSION" -m "MicroBio Lab $NEXT_VERSION"`；
 6. 推送标签，等待 Release 工作流；
 7. 验证 GitHub Release 不是 draft/prerelease；
 8. 使用未登录请求验证两个 GHCR manifest 返回 HTTP 200；
@@ -263,6 +271,9 @@ v1.2.0 Release 资产 `microbio-lab-v1.2.0.tar.gz` 的 SHA256 为 `7d855194c2424
 - 生产升级优先使用明确的 `vX.Y.Z`，不要用 `latest`；
 - 更新镜像时 App 和 Builder 必须使用同一版本；
 - 标准升级先更新 Release 中的部署文件，再运行目标版本的 `upgrade.sh`；
+- `mbl upgrade vX.Y.Z` 必须继续走下载、校验、部署文件备份和目标版本升级的完整流程，不可退化为只换镜像；
+- `bootstrap.sh` 只接受明确版本，必须校验正式 Release，拒绝覆盖已有 `/opt/microbio-lab` 配置或 `/srv/microbio-lab` 数据；
+- 维护菜单的默认卸载必须保留永久数据；永久删除必须确认已有异机备份，并继续要求 `PURGE-MICROBIO-LAB`；
 - 每次升级和回滚先备份；
 - 回滚脚本不回退数据库迁移；精确回退使用升级前数据库备份；
 - 备份必须包含 database、sources、builds、published、covers 和 SHA256SUMS；
@@ -279,6 +290,7 @@ v1.2.0 Release 资产 `microbio-lab-v1.2.0.tar.gz` 的 SHA256 为 `7d855194c2424
 - `v1.1.1`：运维脚本、完整备份、离线方案和维护交接。
 - `v1.1.2`：JSX 上传上限提高到 10 MiB；本地 v1.1.1 离线包转为只读历史备份。
 - `v1.2.0`：实验级 Markdown 知识点复习、管理端维护、学生详情页悬浮阅读与安全按需渲染。
+- `v1.3.0`：`mbl` 中文交互维护菜单、分级卸载、参数模式、Release 感知升级入口和 VPS 引导式部署。
 
 ## 12. 凭据与外部状态
 

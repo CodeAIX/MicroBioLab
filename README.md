@@ -2,7 +2,7 @@
 
 可部署到普通 Linux VPS 的医学微生物学虚拟仿真实验平台，用于安全上传、检查、构建、预览、发布和版本化管理单文件 React JSX 实验，并为每个实验配置 Markdown 知识点复习。平台软件与实验资产完全解耦；发布后的 `v000001` 等目录保持不可变，回滚只切换数据库中的生效版本。
 
-当前稳定版：[`v1.2.0`](https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.2.0)
+当前稳定版：[`v1.3.0`](https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.3.0)
 
 主要能力：
 
@@ -17,11 +17,19 @@
 ## 快速部署
 
 ```bash
-docker pull ghcr.io/codeaix/microbio-lab-app:v1.2.0
-docker pull ghcr.io/codeaix/microbio-lab-builder:v1.2.0
+docker pull ghcr.io/codeaix/microbio-lab-app:v1.3.0
+docker pull ghcr.io/codeaix/microbio-lab-builder:v1.3.0
 ```
 
 镜像只负责 App/Builder，完整部署还需要仓库中的 `compose.yaml`、`.env`、PostgreSQL 和实验静态站。请按 [VPS 部署与运维](README-VPS.md) 完成安装，不要直接手写 `docker run`。
+
+已安装 Docker Engine 与 Compose Plugin 的全新 VPS 可下载不可变标签中的引导式部署脚本；脚本会继续下载并校验正式 Release，而不是直接使用 `main`：
+
+```bash
+INSTALL_VERSION="v1.3.0"
+curl -fL "https://raw.githubusercontent.com/CodeAIX/MicroBioLab/${INSTALL_VERSION}/scripts/bootstrap.sh" -o /tmp/microbio-bootstrap.sh
+sudo bash /tmp/microbio-bootstrap.sh "$INSTALL_VERSION"
+```
 
 维护与二次构建：
 
@@ -48,7 +56,7 @@ packages/shared      共享类型和约束
 db/migrations        PostgreSQL 迁移
 infra                Dockerfile 与实验 Nginx
 samples              永久回归实验 fixture
-scripts              安装、健康、升级、回滚、备份、恢复、卸载
+scripts              引导部署、维护菜单、升级、备份、恢复、分级卸载
 ```
 
 ## 本地开发
@@ -140,8 +148,8 @@ docker compose exec app node dist/cli/disable-admin.js --email admin@example.com
 推送 `v*` 标签后，`release.yml` 在完整 CI 通过后发布 amd64/arm64 镜像：
 
 ```text
-ghcr.io/<owner>/microbio-lab-app:v1.2.0
-ghcr.io/<owner>/microbio-lab-builder:v1.2.0
+ghcr.io/<owner>/microbio-lab-app:v1.3.0
+ghcr.io/<owner>/microbio-lab-builder:v1.3.0
 ```
 
 同时生成 `1.2`、`1`、`sha-*`，稳定版本更新 `latest`，并创建带 Compose、环境样例、基础设施、脚本和校验和的 GitHub Release。仓库不保存 PAT，Actions 使用最小权限 `GITHUB_TOKEN`。
@@ -149,24 +157,31 @@ ghcr.io/<owner>/microbio-lab-builder:v1.2.0
 两个 GHCR Package 均为公开镜像，可匿名拉取：
 
 ```bash
-docker pull ghcr.io/codeaix/microbio-lab-app:v1.2.0
-docker pull ghcr.io/codeaix/microbio-lab-builder:v1.2.0
+docker pull ghcr.io/codeaix/microbio-lab-app:v1.3.0
+docker pull ghcr.io/codeaix/microbio-lab-builder:v1.3.0
 ```
 
 ## VPS 运维
 
-完整复制粘贴步骤见 [README-VPS.md](README-VPS.md)。常用命令：
+完整复制粘贴步骤见 [README-VPS.md](README-VPS.md)。安装维护命令后，在 VPS 任意目录执行以下命令即可打开中文菜单：
 
 ```bash
-./scripts/healthcheck.sh
-./scripts/backup.sh
-./scripts/upgrade.sh v1.2.0
-./scripts/rollback.sh v1.1.0
-./scripts/restore.sh /srv/microbio-lab/backups/2026-08-16_120000
-./scripts/uninstall.sh
+sudo mbl
 ```
 
-普通卸载绝不删除 `/srv/microbio-lab`；只有显式 `--purge-data` 和二次确认才永久清理。
+也可以直接使用参数模式：
+
+```bash
+sudo mbl status
+sudo mbl health
+sudo mbl logs app
+sudo mbl backup
+sudo mbl upgrade v1.3.0
+sudo mbl uninstall
+sudo mbl help
+```
+
+全新安装和版本升级会自动注册该命令；也可运行 `sudo ./scripts/install-management-command.sh` 手动修复。回滚、停止、恢复和卸载仍保留显式确认保护。菜单把保留数据的卸载与永久清理分开；永久清理要求确认已有异机备份并再次输入固定确认词。
 
 ## 安全与故障排查
 

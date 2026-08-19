@@ -1,6 +1,6 @@
 # VPS 部署与运维
 
-本文以公开版本 `v1.2.0` 为例，适用于 Ubuntu/Debian VPS。生产环境固定使用不可变的 `vX.Y.Z` 镜像标签，不建议直接使用 `latest`。
+本文以公开版本 `v1.3.0` 为例，适用于 Ubuntu/Debian VPS。生产环境固定使用不可变的 `vX.Y.Z` 镜像标签，不建议直接使用 `latest`。
 
 平台只监听 VPS 本机：
 
@@ -52,8 +52,29 @@ docker compose version
 
 仓库和 GHCR 镜像均为公开资源，不需要 GitHub Token 或 `docker login`：
 
+已安装 Docker Engine 与 Docker Compose Plugin 的全新 VPS，可以使用固定版本标签下载引导式部署脚本。不要直接执行 `main` 分支脚本，也不建议使用 `curl | sudo bash`：
+
 ```bash
-INSTALL_VERSION="v1.2.0"
+INSTALL_VERSION="v1.3.0"
+curl -fL \
+  "https://raw.githubusercontent.com/CodeAIX/MicroBioLab/${INSTALL_VERSION}/scripts/bootstrap.sh" \
+  -o /tmp/microbio-bootstrap.sh
+sudo bash /tmp/microbio-bootstrap.sh "$INSTALL_VERSION"
+```
+
+脚本会询问主平台域名、实验站域名和管理员邮箱，然后要求确认。它会下载正式 Release 与 `SHA256SUMS`、拒绝覆盖既有配置或数据、生成随机数据库密码和 Session 密钥、启动服务、执行健康检查，并交互创建首位管理员。Cloudflare Tunnel 的 Public Hostname 仍需在 Cloudflare 控制台配置。
+
+也可以通过参数一次提供非敏感配置；数据库密码、Session 密钥和管理员密码都不会放进命令行：
+
+```bash
+sudo bash /tmp/microbio-bootstrap.sh \
+  "$INSTALL_VERSION" lab.example.com exp.lab.example.com admin@example.com
+```
+
+需要手工控制每一步时，使用下面的传统安装流程：
+
+```bash
+INSTALL_VERSION="v1.3.0"
 
 sudo install -d -o "$(id -u)" -g "$(id -g)" /opt/microbio-lab
 git clone --branch "$INSTALL_VERSION" --depth 1 \
@@ -63,7 +84,7 @@ cd /opt/microbio-lab
 sudo ./scripts/install.sh
 ```
 
-`git clone` 要求目标目录为空；已有部署应使用后面的升级流程。
+`git clone` 要求目标目录为空；已有部署应使用后面的升级流程。`install.sh` 会同时注册 `/usr/local/bin/mbl`，之后在任意目录运行 `sudo mbl` 即可打开中文维护菜单。
 
 配置两个 Cloudflare Tunnel 域名并生成随机密钥：
 
@@ -79,8 +100,8 @@ cp .env.example .env
 chmod 600 .env
 sed -i \
   -e 's|^GHCR_OWNER=.*|GHCR_OWNER=codeaix|' \
-  -e 's|^PLATFORM_VERSION=.*|PLATFORM_VERSION=v1.2.0|' \
-  -e 's|^BUILDER_VERSION=.*|BUILDER_VERSION=v1.2.0|' \
+  -e 's|^PLATFORM_VERSION=.*|PLATFORM_VERSION=v1.3.0|' \
+  -e 's|^BUILDER_VERSION=.*|BUILDER_VERSION=v1.3.0|' \
   -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${DB_PASSWORD}|" \
   -e "s|^DATABASE_URL=.*|DATABASE_URL=postgresql://microbio:${DB_PASSWORD}@db:5432/microbio|" \
   -e "s|^SESSION_SECRET=.*|SESSION_SECRET=${SESSION_SECRET}|" \
@@ -122,8 +143,8 @@ exp.lab.example.com  -> HTTP -> 127.0.0.1:18081
 匿名拉取指定版本：
 
 ```bash
-docker pull ghcr.io/codeaix/microbio-lab-app:v1.2.0
-docker pull ghcr.io/codeaix/microbio-lab-builder:v1.2.0
+docker pull ghcr.io/codeaix/microbio-lab-app:v1.3.0
+docker pull ghcr.io/codeaix/microbio-lab-builder:v1.3.0
 ```
 
 生产部署应把 `.env` 中两个版本变量设为同一个不可变版本：
@@ -140,7 +161,7 @@ grep -E '^(PLATFORM_VERSION|BUILDER_VERSION)=' /opt/microbio-lab/.env
 
 ```bash
 cd /opt/microbio-lab
-TARGET_VERSION="v1.2.0"
+TARGET_VERSION="v1.3.0"
 DOWNLOAD_DIR="$(mktemp -d)"
 
 curl -fL \
@@ -157,6 +178,14 @@ sudo /opt/microbio-lab/scripts/upgrade.sh "$TARGET_VERSION"
 rm -rf -- "$DOWNLOAD_DIR"
 ```
 
+升级到包含统一维护命令的版本后，后续标准升级可直接执行：
+
+```bash
+sudo mbl upgrade v1.3.0
+```
+
+该命令同样会下载并校验 GitHub Release、备份 `/opt/microbio-lab` 部署文件，再调用目标版本的升级脚本；不是只切换镜像标签。
+
 `upgrade.sh` 会：
 
 1. 创建数据库和全部实验资产备份；
@@ -169,10 +198,38 @@ rm -rf -- "$DOWNLOAD_DIR"
 
 ```bash
 cd /opt/microbio-lab
-sudo ./scripts/upgrade.sh v1.2.0
+sudo ./scripts/upgrade.sh v1.3.0
 ```
 
 ## 6. 日常维护
+
+统一中文菜单：
+
+```bash
+sudo mbl
+```
+
+菜单包含状态、健康检查、实时日志、备份、备份列表、启停、重启、标准升级、镜像回滚和备份恢复。也支持适合复制粘贴或自动化的参数模式：
+
+```bash
+sudo mbl status
+sudo mbl health
+sudo mbl logs app
+sudo mbl backup
+sudo mbl backups
+sudo mbl restart
+sudo mbl uninstall
+sudo mbl help
+```
+
+菜单中的卸载分为三级：只卸载容器与网络、同时删除平台镜像、永久删除 `/srv/microbio-lab` 数据。前两级保留数据和 `/opt/microbio-lab` 配置；永久删除会明确提示本机备份也将被删除，要求先确认已有异机备份，再沿用 `PURGE-MICROBIO-LAB` 二次确认。
+
+如命令不存在但部署文件已包含该功能，可重新注册：
+
+```bash
+cd /opt/microbio-lab
+sudo ./scripts/install-management-command.sh
+```
 
 状态与资源：
 
@@ -261,6 +318,12 @@ sudo ./scripts/healthcheck.sh
 离线包必须与 VPS 架构一致：`x86_64` 使用 `linux/amd64`，`aarch64`/`arm64` 使用 `linux/arm64`。
 
 ## 10. 卸载
+
+推荐从统一菜单进入，菜单会先区分是否保留数据：
+
+```bash
+sudo mbl
+```
 
 仅移除容器和项目网络，保留镜像、配置及全部数据：
 

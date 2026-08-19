@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-if [[ $# -ne 1 || ! "$1" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]; then echo "用法：$0 v1.2.0" >&2; exit 1; fi
+if [[ $# -ne 1 || ! "$1" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$ ]]; then echo "用法：$0 v1.3.0" >&2; exit 1; fi
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_DIR"
@@ -20,5 +20,10 @@ docker compose up -d app builder
 if ! "$SCRIPT_DIR/healthcheck.sh"; then
   echo "升级健康检查失败；升级前环境文件保存在 $ENV_BACKUP，可运行：./scripts/rollback.sh ${CURRENT}" >&2
   exit 1
+fi
+if [[ "${EUID}" -eq 0 ]]; then
+  "$SCRIPT_DIR/install-management-command.sh"
+else
+  echo "可运行 sudo ./scripts/install-management-command.sh 安装 mbl 维护命令。"
 fi
 echo "升级完成：$1"
