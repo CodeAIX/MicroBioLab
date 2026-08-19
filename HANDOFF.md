@@ -8,7 +8,7 @@
 - 可见性：Public
 - 默认分支：`main`
 - 当前发布：`v1.5.1`
-- 发布源码：annotated tag `v1.5.1`
+- 发布源码：annotated tag `v1.5.1`，提交 `932ac3364f221e3ec058d1fca05c5930243a9e32`
 - GitHub Release：`https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.5.1`
 - 主镜像：`ghcr.io/codeaix/microbio-lab-app:v1.5.1`
 - Builder 镜像：`ghcr.io/codeaix/microbio-lab-builder:v1.5.1`
@@ -24,6 +24,18 @@ v1.5.1 发布内容：
 - 普通表格保持既有布局，小屏幕宽表继续横向滚动；
 - 弹窗尺寸、标题区、正文排版和知识点 Markdown 数据均不变；
 - 不新增数据库迁移，并增加宽表与普通表差异化布局的浏览器回归测试。
+
+v1.5.1 已验证的发布状态：
+
+```text
+main CI：    https://github.com/CodeAIX/MicroBioLab/actions/runs/32256601224（success）
+Release CI： https://github.com/CodeAIX/MicroBioLab/actions/runs/32256889323（success）
+App index：  sha256:42819ee89c0f676d5326ead8d16782c4325c3c65924e5047e452e8defdf7318c
+Builder：    sha256:df0e9fa356137883659fafac3de37791c18afa5aac1b0222a337bc7647539437
+Release tar.gz SHA256：2606866f2ab7bbb50ec6acf184c8db95d9b266741c3dc108c1e68961edbfce4e
+```
+
+两个 v1.5.1 镜像均已通过匿名 Registry 请求验证，并同时包含 `linux/amd64` 和 `linux/arm64`。Release 不是 draft/prerelease，下载后的部署归档已通过 `SHA256SUMS` 校验，正式中文 Release 说明已更新。
 
 v1.5.0 历史发布内容：
 
