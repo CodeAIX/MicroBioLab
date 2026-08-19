@@ -8,7 +8,7 @@
 - 可见性：Public
 - 默认分支：`main`
 - 当前发布：`v1.2.0`
-- 发布源码提交：以不可变 `v1.2.0` tag 为准
+- 发布源码提交：`6584d75c30d8abd9c9d4af9e5f1b9b546962e381`
 - GitHub Release：`https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.2.0`
 - 主镜像：`ghcr.io/codeaix/microbio-lab-app:v1.2.0`
 - Builder 镜像：`ghcr.io/codeaix/microbio-lab-builder:v1.2.0`
@@ -17,6 +17,16 @@
 - Node.js：24+
 - PostgreSQL：17
 - 生产部署：Docker Compose + Cloudflare Tunnel，无宿主机反向代理
+
+v1.2.0 已验证的发布状态：
+
+```text
+main CI：    https://github.com/CodeAIX/MicroBioLab/actions/runs/32202513867（success）
+Release CI： https://github.com/CodeAIX/MicroBioLab/actions/runs/32202715637（success）
+App index：  sha256:3b55bd5f632008d75a31d18eb264d43438ec23b1f7e21cf86474bcfd9faf55f0
+Builder：    sha256:af63bd9d47a7d2af848f99073e488fa549da848c9568504973aefbfe0ccb748a
+Release tar.gz SHA256：7d855194c2424fcccfe5724d245e74e70ff7d635867ff03988f60904d29b2ffb
+```
 
 v1.1.2 已验证的历史发布状态：
 
@@ -27,9 +37,9 @@ App index：  sha256:f3f37ff17e0cca95dcc4528be2639b558f1f7e61783ffbcf97006256c54
 Builder：    sha256:68b3ac23732c797ac9512e27ff9c87f8bcac9d9e5337a9159d38dfe737f26333
 ```
 
-两个镜像均已用匿名 Registry 请求验证为 HTTP 200，且 manifest 同时包含 `linux/amd64` 和 `linux/arm64`。Release 不是 draft/prerelease。
+v1.2.0 两个镜像均已用匿名 Registry 请求验证为 HTTP 200，且 manifest 同时包含 `linux/amd64` 和 `linux/arm64`。Release 不是 draft/prerelease，下载后的资产已通过 `SHA256SUMS` 校验。
 
-v1.2.0 增加知识点复习：数据库迁移 `003_knowledge_reviews.sql`、管理端 Markdown 上传/替换/删除、公共按需读取 API、学生详情页悬浮阅读与对应测试。功能提交的 main CI `32202196743` 已完整通过；Release 状态和镜像 digest 仍须在标签工作流完成后核验并回填。
+v1.2.0 增加知识点复习：数据库迁移 `003_knowledge_reviews.sql`、管理端 Markdown 上传/替换/删除、公共按需读取 API、学生详情页悬浮阅读与对应测试。功能提交和正式标签工作流均已完整通过。
 
 业务域名：
 
@@ -245,6 +255,8 @@ GitHub CI 成功标准：
 不要移动或覆盖已经发布的 tag，也不要静默替换 Release 资产。影响部署、运行命令或 Release 分发内容的文档/脚本修正应发布新的 patch 版本；仅记录既有发布结果的维护元数据可以只提交到 `main`，但不得回写旧 Release。
 
 v1.1.2 Release 资产 `microbio-lab-v1.1.2.tar.gz` 的 SHA256 为 `be35549fee79151c57a7fe0b6c9f6f3c09f6b77461deadcde5e774bdcb4e59e0`。该值只用于验证既有不可变资产；后续 `main` 上的文档更新不会回写或替换 v1.1.2 Release。
+
+v1.2.0 Release 资产 `microbio-lab-v1.2.0.tar.gz` 的 SHA256 为 `7d855194c2424fcccfe5724d245e74e70ff7d635867ff03988f60904d29b2ffb`。发布后维护元数据只提交到 `main`，不得回写或替换 v1.2.0 Release。
 
 ## 10. 运维原则
 
