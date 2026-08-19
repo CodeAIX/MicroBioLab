@@ -8,7 +8,7 @@
 - 可见性：Public
 - 默认分支：`main`
 - 当前发布：`v1.3.0`
-- 发布源码：annotated tag `v1.3.0`（精确提交与发布校验值在 Release 完成后回填 `main`）
+- 发布源码：annotated tag `v1.3.0`，提交 `0aad020ebf1dafae393fab12b356e2fe66e8259e`
 - GitHub Release：`https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.3.0`
 - 主镜像：`ghcr.io/codeaix/microbio-lab-app:v1.3.0`
 - Builder 镜像：`ghcr.io/codeaix/microbio-lab-builder:v1.3.0`
@@ -25,6 +25,16 @@ v1.3.0 发布内容：
 - Release 感知的标准升级、分级卸载与永久删除双重确认；
 - 安装和升级时自动注册 `/usr/local/bin/mbl`；
 - CI 增加维护命令回归测试。
+
+v1.3.0 已验证的发布状态：
+
+```text
+main CI：    https://github.com/CodeAIX/MicroBioLab/actions/runs/32235069988（success）
+Release CI： https://github.com/CodeAIX/MicroBioLab/actions/runs/32235715366（success）
+App index：  sha256:cf9cdc5796ad85db3b05c448109dd7418b03fd107637c740c1bc6e71ae1c260a
+Builder：    sha256:9d7f8cb9085cbf292685ede1d87876acf8c3307e3024b7e2e13f067ca819838a
+Release tar.gz SHA256：1ac2b1ef24c7e31ef0d204e0a936bf40c01a85a3ce1e7aa0d48d1fe43af46ffa
+```
 
 v1.2.0 已验证的历史发布状态：
 
@@ -45,7 +55,7 @@ App index：  sha256:f3f37ff17e0cca95dcc4528be2639b558f1f7e61783ffbcf97006256c54
 Builder：    sha256:68b3ac23732c797ac9512e27ff9c87f8bcac9d9e5337a9159d38dfe737f26333
 ```
 
-v1.2.0 两个镜像均已用匿名 Registry 请求验证为 HTTP 200，且 manifest 同时包含 `linux/amd64` 和 `linux/arm64`。Release 不是 draft/prerelease，下载后的资产已通过 `SHA256SUMS` 校验。
+v1.3.0 两个镜像均已用匿名 Registry 请求验证为 HTTP 200，且 manifest 同时包含 `linux/amd64` 和 `linux/arm64`。Release 不是 draft/prerelease，下载后的资产已通过 `SHA256SUMS` 校验，归档包含最新说明页和全部部署、升级、维护脚本。
 
 v1.2.0 增加知识点复习：数据库迁移 `003_knowledge_reviews.sql`、管理端 Markdown 上传/替换/删除、公共按需读取 API、学生详情页悬浮阅读与对应测试。功能提交和正式标签工作流均已完整通过。
 
@@ -265,6 +275,8 @@ GitHub CI 成功标准：
 v1.1.2 Release 资产 `microbio-lab-v1.1.2.tar.gz` 的 SHA256 为 `be35549fee79151c57a7fe0b6c9f6f3c09f6b77461deadcde5e774bdcb4e59e0`。该值只用于验证既有不可变资产；后续 `main` 上的文档更新不会回写或替换 v1.1.2 Release。
 
 v1.2.0 Release 资产 `microbio-lab-v1.2.0.tar.gz` 的 SHA256 为 `7d855194c2424fcccfe5724d245e74e70ff7d635867ff03988f60904d29b2ffb`。发布后维护元数据只提交到 `main`，不得回写或替换 v1.2.0 Release。
+
+v1.3.0 Release 资产 `microbio-lab-v1.3.0.tar.gz` 的 SHA256 为 `1ac2b1ef24c7e31ef0d204e0a936bf40c01a85a3ce1e7aa0d48d1fe43af46ffa`。发布后维护元数据只提交到 `main`，不得回写或替换 v1.3.0 Release。
 
 ## 10. 运维原则
 
