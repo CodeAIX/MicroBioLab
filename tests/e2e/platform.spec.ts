@@ -32,8 +32,9 @@ test("administrator can log in and preview the immutable version", async ({ page
   await page.getByRole("row").filter({ hasText: "肠道杆菌的分离培养与生化鉴定" }).getByRole("link", { name: "管理 →", exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/experiments\/[0-9a-f-]+$/);
   await expect(page.getByText("KnowledgeReview.md", { exact: true })).toBeVisible();
-  await expect(page.locator(".version-list").getByText("v000001", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "预览", exact: true }).click();
+  const originalVersion = page.locator(".version-list article").filter({ hasText: "v000001" });
+  await expect(originalVersion.getByText("v000001", { exact: true })).toBeVisible();
+  await originalVersion.getByRole("button", { name: "预览", exact: true }).click();
   const frame = page.frameLocator('iframe[title="管理员预览"]');
   await expect(frame.getByText("肠道杆菌的分离培养与生化鉴定").first()).toBeVisible();
 });
@@ -67,14 +68,15 @@ test("administrator can preflight and atomically publish a JSX directory", async
   await page.getByRole("button", { name: "批量更新 JSX", exact: true }).click();
 
   await page.getByLabel("选择包含多个实验包的目录").setInputFiles(path.resolve("tests/fixtures/batch-next"));
-  await expect(page.getByText("预检完成：2 个可更新", { exact: true })).toBeVisible();
+  const batchDialog = page.getByRole("dialog", { name: "批量更新 JSX" });
+  await expect(batchDialog.getByText("预检完成：2 个可更新", { exact: true })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText("无匹配实验", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "创建 2 个新版本", exact: true }).click();
   await expect(page.getByText("可发布", { exact: true })).toBeVisible({ timeout: 90_000 });
 
   page.once("dialog", (dialog) => void dialog.accept());
   await page.getByRole("button", { name: "一次性发布 2 个实验", exact: true }).click();
-  await expect(page.getByText("已发布", { exact: true })).toBeVisible();
+  await expect(batchDialog.locator(".batch-status")).toHaveText("已发布");
   await page.getByRole("button", { name: "关闭", exact: true }).click();
   await expect(page.getByRole("row").filter({ hasText: "肠道杆菌的分离培养与生化鉴定" }).getByText("v000003", { exact: true })).toBeVisible();
 });
@@ -88,7 +90,9 @@ test("administrator can bulk-clean only safe unpublished versions", async ({ pag
   await page.getByRole("row").filter({ hasText: "肠道杆菌的分离培养与生化鉴定" }).getByRole("link", { name: "管理 →", exact: true }).click();
   await page.locator('.inline-upload input[type="file"]').setInputFiles("samples/enterobacteria/App.jsx");
   await page.getByRole("button", { name: "上传新版", exact: true }).click();
-  await expect(page.getByText("v000004", { exact: true })).toBeVisible();
+  const cleanupVersion = page.locator(".version-list article").filter({ hasText: "v000004" });
+  await expect(cleanupVersion.getByText("v000004", { exact: true })).toBeVisible();
+  await expect(cleanupVersion.getByText("构建成功", { exact: true })).toBeVisible({ timeout: 90_000 });
   await page.getByRole("link", { name: "← 返回列表", exact: true }).click();
   await page.getByRole("button", { name: "清理未发布版本", exact: true }).click();
   await page.getByRole("button", { name: "全选", exact: true }).click();
