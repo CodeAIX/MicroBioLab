@@ -77,7 +77,7 @@ test("administrator can preflight and atomically publish a JSX directory", async
   page.once("dialog", (dialog) => void dialog.accept());
   await page.getByRole("button", { name: "一次性发布 2 个实验", exact: true }).click();
   await expect(batchDialog.locator(".batch-status")).toHaveText("已发布");
-  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await batchDialog.locator(".modal-actions").getByRole("button", { name: "关闭", exact: true }).click();
   await expect(page.getByRole("row").filter({ hasText: "肠道杆菌的分离培养与生化鉴定" }).getByText("v000003", { exact: true })).toBeVisible();
 });
 
