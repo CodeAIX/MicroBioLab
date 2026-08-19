@@ -14,7 +14,7 @@ test("published sample opens inside the sandboxed experiment frame", async ({ pa
   await expect(review.getByRole("heading", { name: /知识点复习 · 肠道杆菌/ })).toBeVisible();
   await expect(review.getByText("核心判断", { exact: true })).toBeVisible();
   const regularTable = review.locator("table").first();
-  const wideTable = review.locator("table").filter({ has: review.getByText("关键记忆点", { exact: true }) });
+  const wideTable = review.locator("table").filter({ hasText: "关键记忆点" });
   await expect(regularTable).toHaveCSS("display", "block");
   await expect(wideTable).toHaveCSS("display", "table");
   const wideTableWidth = await wideTable.evaluate((table) => ({ client: table.clientWidth, scroll: table.scrollWidth }));
