@@ -7,6 +7,8 @@ export function multipartLimitError(error: unknown): AppError | null {
   const fieldname = multipartError.part?.fieldname;
   const message = fieldname === "cover"
     ? "封面图片不能超过 2 MiB"
+    : fieldname === "knowledge"
+      ? "知识点文件不能超过 512 KiB"
     : fieldname === "jsx"
       ? "JSX 文件不能超过 10 MiB"
       : "上传文件不能超过 10 MiB";

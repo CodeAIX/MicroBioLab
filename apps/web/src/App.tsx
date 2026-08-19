@@ -1,14 +1,15 @@
-import { createContext, useContext, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { createContext, lazy, Suspense, useContext, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Link, Navigate, NavLink, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import QRCode from "qrcode";
-import { COVER_MAX_UPLOAD_BYTES, JSX_MAX_UPLOAD_BYTES } from "@microbio/shared";
+import { COVER_MAX_UPLOAD_BYTES, JSX_MAX_UPLOAD_BYTES, KNOWLEDGE_REVIEW_MAX_UPLOAD_BYTES } from "@microbio/shared";
 import { api, ApiClientError } from "./api";
 
 type User = { id: string; email: string; role: "ADMIN" };
 type Experiment = {
   id: string; slug: string; slug_locked: boolean; title: string; description: string; category: string;
   cover_path?: string; status: string; display_order: number; active_version_id?: string;
-  active_version_number?: number; version_count?: number; updated_at: string;
+  active_version_number?: number; version_count?: number; updated_at: string; knowledge_review?: string;
+  knowledge_review_filename?: string; knowledge_review_updated_at?: string;
 };
 type Version = {
   id: string; version_number: number; status: string; job_status: string; source_sha256: string;
@@ -17,8 +18,10 @@ type Version = {
 };
 type PublicExperiment = {
   slug: string; title: string; description: string; category: string; cover_path?: string;
-  version: string; iframeUrl: string; updated_at: string;
+  version: string; iframeUrl: string; updated_at: string; has_knowledge_review?: boolean;
 };
+
+const KnowledgeReviewContent = lazy(() => import("./KnowledgeReview"));
 
 const statusNames: Record<string, string> = { draft: "草稿", queued: "排队中", running: "构建中", building: "构建中", success: "构建成功", failed: "构建失败", published: "已发布", hidden: "已下架", archived: "已归档" };
 const versionName = (n: number) => `v${String(n).padStart(6, "0")}`;
@@ -62,6 +65,30 @@ function QrPanel({ value }: { value: string }) {
   return <aside className="qr-panel"><div>{dataUrl ? <img src={dataUrl} alt="实验二维码" /> : <Loading />}</div><strong>手机扫码开始实验</strong><p>二维码始终指向当前发布版本</p></aside>;
 }
 
+function KnowledgeReviewModal({ slug, title, onClose }: { slug: string; title: string; onClose: () => void }) {
+  const [content, setContent] = useState<string>();
+  const [error, setError] = useState<unknown>();
+  useEffect(() => {
+    api<{ knowledgeReview: { content: string } }>(`/api/public/experiments/${slug}/knowledge-review`)
+      .then((result) => setContent(result.knowledgeReview.content))
+      .catch(setError);
+  }, [slug]);
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => { document.body.style.overflow = previousOverflow; window.removeEventListener("keydown", closeOnEscape); };
+  }, [onClose]);
+  return <div className="knowledge-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="knowledge-dialog" role="dialog" aria-modal="true" aria-labelledby="knowledge-dialog-title">
+      <header><div><p>KNOWLEDGE REVIEW</p><strong id="knowledge-dialog-title">{title}</strong></div><button type="button" onClick={onClose} aria-label="关闭知识点复习">×</button></header>
+      <div className="knowledge-scroll">{error ? <ErrorNotice error={error} /> : !content ? <Loading /> : <Suspense fallback={<Loading />}><KnowledgeReviewContent content={content} /></Suspense>}</div>
+      <footer><button className="button primary" type="button" onClick={onClose}>复习完成</button></footer>
+    </section>
+  </div>;
+}
+
 const AuthContext = createContext<{ user: User | null; loading: boolean; refresh: () => Promise<void> }>({ user: null, loading: true, refresh: async () => undefined });
 function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -98,11 +125,12 @@ function usePublicExperiment(slug: string | undefined) {
 function PublicExperimentPage() {
   const { slug } = useParams();
   const { item, error } = usePublicExperiment(slug);
+  const [knowledgeOpen, setKnowledgeOpen] = useState(false);
   if (error) return <main className="center-panel"><ErrorNotice error={error} /><Link to="/">返回首页</Link></main>;
   if (!item) return <Loading />;
   const runPath = `/experiments/${item.slug}/run`;
   const runUrl = `${window.location.origin}${runPath}`;
-  return <div className="public-page"><PublicHeader /><main className="experiment-intro"><section className="intro-hero"><ExperimentCover experiment={item} large /><div className="intro-copy"><p className="eyebrow">VIRTUAL EXPERIMENT · {item.category || "未分类"}</p><h1>{item.title}</h1><div className="intro-meta"><span>{item.version}</span><span>更新于 {new Date(item.updated_at).toLocaleDateString("zh-CN")}</span></div><Link className="button primary launch-button" to={runPath}>开始虚拟实验 <span>→</span></Link></div></section><section className="intro-content"><article><p className="eyebrow">ABOUT THIS LAB</p><h2>实验简介</h2><div className="long-description">{item.description || "暂无实验简介。"}</div><div className="intro-actions"><Link className="button primary" to={runPath}>进入正式实验</Link><button className="button" onClick={() => void navigator.clipboard.writeText(runUrl)}>复制实验地址</button><Link className="button ghost" to="/">返回实验列表</Link></div></article><QrPanel value={runUrl} /></section></main><footer>医学微生物学虚拟仿真实验平台</footer></div>;
+  return <div className="public-page"><PublicHeader /><main className="experiment-intro"><section className="intro-hero"><ExperimentCover experiment={item} large /><div className="intro-copy"><p className="eyebrow">VIRTUAL EXPERIMENT · {item.category || "未分类"}</p><h1>{item.title}</h1><div className="intro-meta"><span>{item.version}</span><span>更新于 {new Date(item.updated_at).toLocaleDateString("zh-CN")}</span></div><div className="hero-actions"><Link className="button primary launch-button" to={runPath}>开始虚拟实验 <span>→</span></Link>{item.has_knowledge_review && <button className="button knowledge-button" onClick={() => setKnowledgeOpen(true)}>📖 知识点复习</button>}</div></div></section><section className="intro-content"><article><p className="eyebrow">ABOUT THIS LAB</p><h2>实验简介</h2><div className="long-description">{item.description || "暂无实验简介。"}</div><div className="intro-actions"><Link className="button primary" to={runPath}>进入正式实验</Link>{item.has_knowledge_review && <button className="button" onClick={() => setKnowledgeOpen(true)}>知识点复习</button>}<button className="button" onClick={() => void navigator.clipboard.writeText(runUrl)}>复制实验地址</button><Link className="button ghost" to="/">返回实验列表</Link></div></article><QrPanel value={runUrl} /></section></main><footer>医学微生物学虚拟仿真实验平台</footer>{knowledgeOpen && <KnowledgeReviewModal slug={item.slug} title={item.title} onClose={() => setKnowledgeOpen(false)} />}</div>;
 }
 
 function PublicRunPage() {
@@ -147,8 +175,8 @@ function Experiments() {
 
 function NewExperiment() {
   const navigate = useNavigate(); const [error, setError] = useState<unknown>(); const [busy, setBusy] = useState(false);
-  const submit = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const form = event.currentTarget; setBusy(true); setError(undefined); try { uploadFile(form, "jsx", "JSX 文件", JSX_MAX_UPLOAD_BYTES, "10 MiB", true); const cover = uploadFile(form, "cover", "封面图片", COVER_MAX_UPLOAD_BYTES, "2 MiB"); const body = new FormData(form); if (!cover) body.delete("cover"); const result = await api<{ experimentId: string }>("/api/experiments", { method: "POST", body }); navigate(`/admin/experiments/${result.experimentId}`); } catch (reason) { setError(reason); setBusy(false); } };
-  return <><PageHeader eyebrow="NEW EXPERIMENT" title="新建实验"><Link className="button ghost" to="/admin/experiments">取消</Link></PageHeader><form className="edit-form panel" onSubmit={submit}><ErrorNotice error={error} /><div className="form-grid"><label>实验名称 *<input name="title" required maxLength={200} placeholder="例如：肠道杆菌的分离培养与生化鉴定" /></label><label>Slug *<input name="slug" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="enterobacteria-identification" /><small>首次发布后不可修改</small></label><label>分类<input name="category" maxLength={100} placeholder="肠道杆菌" /></label><label>封面（可选）<input name="cover" type="file" accept="image/png,image/jpeg,image/webp" /><small>可留空，系统自动生成主题色块；最大 2 MiB</small></label><label className="wide">简介<textarea name="description" rows={7} maxLength={4000} placeholder="说明实验目标、主要内容、适用对象和学习要求" /></label><label className="wide file-field">JSX 实验文件 *<input name="jsx" type="file" accept=".jsx,text/jsx" required /><span>仅限单个 UTF-8 `.jsx` 文件，最大 10 MiB</span></label></div><div className="form-actions"><button className="button primary" disabled={busy}>{busy ? "上传并创建中…" : "创建实验并开始构建"}</button></div></form></>;
+  const submit = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const form = event.currentTarget; setBusy(true); setError(undefined); try { uploadFile(form, "jsx", "JSX 文件", JSX_MAX_UPLOAD_BYTES, "10 MiB", true); const cover = uploadFile(form, "cover", "封面图片", COVER_MAX_UPLOAD_BYTES, "2 MiB"); const knowledge = uploadFile(form, "knowledge", "知识点文件", KNOWLEDGE_REVIEW_MAX_UPLOAD_BYTES, "512 KiB"); const body = new FormData(form); if (!cover) body.delete("cover"); if (!knowledge) body.delete("knowledge"); const result = await api<{ experimentId: string }>("/api/experiments", { method: "POST", body }); navigate(`/admin/experiments/${result.experimentId}`); } catch (reason) { setError(reason); setBusy(false); } };
+  return <><PageHeader eyebrow="NEW EXPERIMENT" title="新建实验"><Link className="button ghost" to="/admin/experiments">取消</Link></PageHeader><form className="edit-form panel" onSubmit={submit}><ErrorNotice error={error} /><div className="form-grid"><label>实验名称 *<input name="title" required maxLength={200} placeholder="例如：肠道杆菌的分离培养与生化鉴定" /></label><label>Slug *<input name="slug" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="enterobacteria-identification" /><small>首次发布后不可修改</small></label><label>分类<input name="category" maxLength={100} placeholder="肠道杆菌" /></label><label>封面（可选）<input name="cover" type="file" accept="image/png,image/jpeg,image/webp" /><small>可留空，系统自动生成主题色块；最大 2 MiB</small></label><label className="wide">简介<textarea name="description" rows={7} maxLength={4000} placeholder="说明实验目标、主要内容、适用对象和学习要求" /></label><label className="wide file-field">JSX 实验文件 *<input name="jsx" type="file" accept=".jsx,text/jsx" required /><span>仅限单个 UTF-8 `.jsx` 文件，最大 10 MiB</span></label><label className="wide file-field">知识点复习（可选）<input name="knowledge" type="file" accept=".md,text/markdown,text/plain" /><span>上传实验包中的 UTF-8 `知识点复习.md`，最大 512 KiB；之后可独立替换</span></label></div><div className="form-actions"><button className="button primary" disabled={busy}>{busy ? "上传并创建中…" : "创建实验并开始构建"}</button></div></form></>;
 }
 
 function ExperimentDetail() {
@@ -160,6 +188,8 @@ function ExperimentDetail() {
   const updateInfo = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const data = new FormData(event.currentTarget); setError(undefined); try { await api(`/api/experiments/${id}`, { method: "PATCH", body: JSON.stringify({ title: data.get("title"), slug: data.get("slug"), category: data.get("category"), description: data.get("description") }) }); await load(); } catch (reason) { setError(reason); } };
   const upload = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const form = event.currentTarget; setError(undefined); try { uploadFile(form, "jsx", "JSX 文件", JSX_MAX_UPLOAD_BYTES, "10 MiB", true); await api(`/api/experiments/${id}/versions`, { method: "POST", body: new FormData(form) }); form.reset(); await load(); } catch (reason) { setError(reason); } };
   const updateCover = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const form = event.currentTarget; setError(undefined); try { uploadFile(form, "cover", "封面图片", COVER_MAX_UPLOAD_BYTES, "2 MiB", true); await api(`/api/experiments/${id}/cover`, { method: "POST", body: new FormData(form) }); form.reset(); await load(); } catch (reason) { setError(reason); } };
+  const updateKnowledgeReview = async (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const form = event.currentTarget; setError(undefined); try { uploadFile(form, "knowledge", "知识点文件", KNOWLEDGE_REVIEW_MAX_UPLOAD_BYTES, "512 KiB", true); await api(`/api/experiments/${id}/knowledge-review`, { method: "POST", body: new FormData(form) }); form.reset(); await load(); } catch (reason) { setError(reason); } };
+  const removeKnowledgeReview = async () => { if (!window.confirm("确定删除该实验的知识点复习吗？")) return; await action(`/api/experiments/${id}/knowledge-review`, "DELETE"); };
   const removeVersion = async (version: Version) => { if (!window.confirm(`确定删除未发布的 ${versionName(version.version_number)} 吗？`)) return; await action(`/api/versions/${version.id}`, "DELETE"); };
   const removeExperiment = async () => { if (!item || deleteSlug !== item.slug || !window.confirm("永久删除后，源码、构建、发布文件和数据库记录均无法恢复。确定继续吗？")) return; setError(undefined); try { await api(`/api/experiments/${id}`, { method: "DELETE", body: JSON.stringify({ slug: deleteSlug }) }); navigate("/admin/experiments"); } catch (reason) { setError(reason); } };
   if (!item) return error ? <ErrorNotice error={error} /> : <Loading />;
@@ -168,6 +198,7 @@ function ExperimentDetail() {
     <div className="detail-summary panel"><div><span>Slug</span><strong>{item.slug}</strong></div><div><span>分类</span><strong>{item.category || "未分类"}</strong></div><div><span>状态</span><Status value={item.status} /></div><div className="detail-actions">{item.status === "published" && <button onClick={() => void action(`/api/experiments/${id}/hide`)}>下架</button>}{item.status === "hidden" && <button onClick={() => void action(`/api/experiments/${id}/restore`)}>恢复为草稿</button>}{item.status === "archived" ? <button onClick={() => void action(`/api/experiments/${id}/restore`)}>恢复为草稿</button> : <button onClick={() => void action(`/api/experiments/${id}/archive`)}>归档</button>}</div></div>
     <div className="admin-detail-grid"><form className="panel edit-form compact-form" onSubmit={updateInfo}><div className="panel-heading"><div><h2>基本信息与介绍页</h2><p>修改后将同步到学生首页和实验介绍页。</p></div></div><div className="form-grid"><label>实验名称<input name="title" required maxLength={200} defaultValue={item.title} /></label><label>Slug<input name="slug" required disabled={item.slug_locked} defaultValue={item.slug} />{item.slug_locked && <small>首次发布后不可修改</small>}</label><label>分类<input name="category" maxLength={100} defaultValue={item.category} /></label><label className="wide">实验简介<textarea name="description" rows={8} maxLength={4000} defaultValue={item.description} /></label></div><div className="form-actions"><button className="button primary">保存基本信息</button></div></form>
       <section className="panel cover-manager"><div className="panel-heading"><div><h2>实验封面</h2><p>不设置图片时自动使用固定主题色块。</p></div></div><ExperimentCover experiment={item} /><form onSubmit={updateCover}><input name="cover" type="file" accept="image/png,image/jpeg,image/webp" required /><button className="button">更换封面</button></form>{item.cover_path && <button className="text-danger" onClick={() => void action(`/api/experiments/${id}/cover`, "DELETE")}>删除图片并使用自动背景</button>}</section></div>
+    <section className="panel knowledge-manager"><div className="panel-heading"><div><h2>知识点复习</h2><p>上传实验包中的 Markdown，学生可在实验介绍页悬浮阅读。</p></div>{item.knowledge_review && <span className="knowledge-ready">已配置</span>}</div>{item.knowledge_review ? <div className="knowledge-file"><div><strong>{item.knowledge_review_filename}</strong><small>{item.knowledge_review.length.toLocaleString("zh-CN")} 字符 · 更新于 {item.knowledge_review_updated_at ? new Date(item.knowledge_review_updated_at).toLocaleString("zh-CN") : "—"}</small></div><button className="text-danger" onClick={() => void removeKnowledgeReview()}>删除知识点</button></div> : <p className="knowledge-empty">暂未配置，学生详情页不会显示“知识点复习”按钮。</p>}<form onSubmit={updateKnowledgeReview}><input name="knowledge" type="file" accept=".md,text/markdown,text/plain" required /><button className="button">{item.knowledge_review ? "替换知识点" : "上传知识点"}</button></form></section>
     <section className="panel"><div className="panel-heading"><div><h2>版本历史</h2><p>每个版本发布后保持不可变，可随时切换生效版本。</p></div><form className="inline-upload" onSubmit={upload}><input name="jsx" type="file" accept=".jsx" required /><button className="button primary">上传新版</button></form></div>{versions.length === 0 ? <Empty>暂无版本</Empty> : <div className="version-list">{versions.map((version) => { const canDelete = !version.published_at && item.active_version_id !== version.id && !["queued", "building", "running"].includes(version.status) && !["queued", "running"].includes(version.job_status); return <article key={version.id} className={item.active_version_id === version.id ? "active-version" : ""}><div className="version-head"><div><strong>{versionName(version.version_number)}</strong>{item.active_version_id === version.id && <span className="current">当前</span>}{version.published_at && <span className="published-once">已发布记录</span>}</div><Status value={version.status} /></div><dl><div><dt>Source SHA256</dt><dd>{version.source_sha256}</dd></div><div><dt>Builder</dt><dd>{version.builder_version ?? "等待构建"}</dd></div><div><dt>Imports</dt><dd>{version.build_imports?.join(", ") || "—"}</dd></div></dl>{version.build_warnings?.map((warning) => <p className="warning" key={warning}>⚠ {warning}</p>)}{version.error_message && <div className="notice error"><strong>{version.error_code}</strong><span>{version.error_message}</span></div>}<div className="version-actions">{canDelete && <button className="text-danger" onClick={() => void removeVersion(version)}>删除未发布版本</button>}{version.status === "success" && <><button onClick={() => setPreview(version)}>预览</button><button className="primary-small" onClick={() => void action(`/api/versions/${version.id}/publish`)}>{item.active_version_id ? "发布 / 回滚至此版本" : "发布"}</button></>}</div></article>; })}</div>}</section>
     {item.status === "archived" && <section className="panel danger-zone"><div><p className="eyebrow">DANGER ZONE</p><h2>永久删除实验及全部文件</h2><p>将同时删除所有 JSX 源码、构建产物、发布目录、封面和数据库记录，此操作不可恢复。</p></div><div><label>输入 Slug <code>{item.slug}</code> 确认<input value={deleteSlug} onChange={(event) => setDeleteSlug(event.target.value)} /></label><button disabled={deleteSlug !== item.slug} onClick={() => void removeExperiment()}>永久删除</button></div></section>}
     {preview && <div className="modal"><div className="modal-card"><header><strong>预览 {versionName(preview.version_number)}</strong><button onClick={() => setPreview(undefined)}>×</button></header><iframe title="管理员预览" src={`/preview/${preview.id}/index.html`} sandbox="allow-scripts allow-forms" referrerPolicy="no-referrer" /></div></div>}</>;

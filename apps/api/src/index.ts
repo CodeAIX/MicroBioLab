@@ -16,7 +16,7 @@ export async function buildApp() {
   app.decorateRequest("user", null);
   await app.register(cookie);
   await app.register(rateLimit, { global: false });
-  await app.register(multipart, { limits: { files: 2, fileSize: JSX_MAX_UPLOAD_BYTES, fields: 10, parts: 12 } });
+  await app.register(multipart, { limits: { files: 3, fileSize: JSX_MAX_UPLOAD_BYTES, fields: 10, parts: 13 } });
   app.addHook("onRequest", loadUser);
   app.addHook("preHandler", originGuard);
   app.addHook("onSend", async (request, reply, payload) => {

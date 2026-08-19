@@ -29,6 +29,8 @@ Builder：    sha256:68b3ac23732c797ac9512e27ff9c87f8bcac9d9e5337a9159d38dfe737f
 
 两个镜像均已用匿名 Registry 请求验证为 HTTP 200，且 manifest 同时包含 `linux/amd64` 和 `linux/arm64`。Release 不是 draft/prerelease。
 
+当前工作区在 `v1.1.2` 基础上有尚未发布的知识点复习优化：数据库迁移 `003_knowledge_reviews.sql`、管理端 Markdown 上传/替换/删除、公共按需读取 API、学生详情页悬浮阅读与对应测试。正式发布前需要确定新版本号，并按第 9 节完整执行 CI 和发布流程。
+
 业务域名：
 
 ```text
@@ -87,6 +89,7 @@ VPS 曾对 `compose.yaml` 的 Nginx tmpfs 权限做过本地修正；该修正�
 - 学生首页、实验介绍页和稳定运行地址；
 - 二维码始终指向 `/experiments/<slug>/run`；
 - 可选封面、自动主题色块、封面替换和删除；
+- 实验级 Markdown 知识点复习，新建时可选上传、后续独立替换或删除；
 - PostgreSQL 增量迁移；
 - Docker Compose、备份、恢复、升级、回滚、卸载脚本；
 - GitHub CI、GHCR 多架构镜像和 GitHub Release。
@@ -103,6 +106,8 @@ VPS 曾对 `compose.yaml` 的 Nginx tmpfs 权限做过本地修正；该修正�
 `https://microbioexp.aixico.com/` 返回 Nginx 404 是设计行为，不是故障。
 
 上传限制的唯一共享数值定义在 `packages/shared/src/index.ts`：`JSX_MAX_UPLOAD_BYTES` 为 10 MiB，`COVER_MAX_UPLOAD_BYTES` 为 2 MiB。浏览器预检、Fastify multipart 入口和服务端存储校验必须同步使用这些常量；multipart 入口按较大的 JSX 上限接收，`saveCover` 必须继续对封面执行独立二次校验。
+
+知识点上传上限同样由 `packages/shared/src/index.ts` 的 `KNOWLEDGE_REVIEW_MAX_UPLOAD_BYTES` 统一定义，目前为 512 KiB。内容保存在 PostgreSQL 的 `experiment_knowledge_reviews` 表中，不新增持久化目录；公共详情 API 只返回是否存在知识点，正文由 `/api/public/experiments/:slug/knowledge-review` 在用户打开悬浮页时按需读取。Markdown 渲染链必须继续保留 `rehype-sanitize`，不得直接信任上传的 HTML。
 
 ## 4. 代码与数据地图
 
@@ -134,7 +139,7 @@ samples                  永久测试 fixture
 
 数据库迁移规则：
 
-- 文件名使用递增前缀，例如 `003_feature.sql`；
+- 文件名使用递增前缀，例如下一次使用 `004_feature.sql`；
 - 已发布迁移绝不修改或重命名；
 - 每个迁移由 `schema_migrations` 记录并在独立事务中执行；
 - 应用启动时持有 PostgreSQL advisory lock 后迁移；
@@ -156,28 +161,26 @@ samples                  永久测试 fixture
 
 ## 6. 本地工作区注意事项
 
-工作区通常位于：
+平台仓库当前位于：
 
 ```text
-/Users/x/Agent/MicroBioLab
+/Users/x/Agent/MicroBioLab/MicroBioLab-platform
 ```
 
-用户有一个未纳入 Git 的本地实验文件：
+实验包位于同级用户资产目录：
 
 ```text
-虚拟仿真实验模块/化脏性球菌鉴定虚拟仿真实验.jsx
+/Users/x/Agent/MicroBioLab/MicroBioLab-JSX/JSX/<实验名称>/
 ```
 
-该文件属于用户资产。除非用户明确要求，否则不得添加、修改、删除或打入源码/离线包。每次提交前使用 `git status --short`，只暂存本任务文件。
-
-另一个肠道杆菌实验文件可能已经受 Git 管理；不要把真实教学资产替换成测试 fixture。自动化测试固定使用 `samples/enterobacteria/App.jsx`。
+该目录中的 JSX、`知识点复习.md`、设计方案和实验简介都属于用户资产。除非用户明确要求，否则不得修改、删除或打入平台仓库/发布包。平台自动化测试固定使用 `samples/enterobacteria/App.jsx` 与 `samples/enterobacteria/KnowledgeReview.md`，不要用真实教学资产替换测试 fixture。每次提交前使用 `git status --short`，只暂存本任务文件。
 
 `/Users/x/Agent/MicroBioLab-artifacts` 中的 v1.1.1 离线包是只读历史备份。用户已明确要求后续版本不再制作、更新或维护本地离线包；发布在线版本时不要改动该目录。
 
 ## 7. 新维护会话的启动顺序
 
 ```bash
-cd /Users/x/Agent/MicroBioLab
+cd /Users/x/Agent/MicroBioLab/MicroBioLab-platform
 git status --short
 git remote -v
 git fetch --tags origin

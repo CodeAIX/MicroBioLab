@@ -1,7 +1,7 @@
 import { cp, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { AppError, COVER_MAX_UPLOAD_BYTES, formatVersion, JSX_MAX_UPLOAD_BYTES } from "@microbio/shared";
+import { AppError, COVER_MAX_UPLOAD_BYTES, formatVersion, JSX_MAX_UPLOAD_BYTES, KNOWLEDGE_REVIEW_MAX_UPLOAD_BYTES } from "@microbio/shared";
 import { config } from "./config.js";
 import { safeRelativePath, sha256 } from "./security.js";
 
@@ -16,6 +16,18 @@ export function decodeJsx(buffer: Buffer): string {
   } catch {
     throw new AppError("UPLOAD_INVALID", "JSX 文件必须使用 UTF-8 编码");
   }
+}
+
+export function decodeKnowledgeReview(buffer: Buffer): string {
+  if (buffer.byteLength > KNOWLEDGE_REVIEW_MAX_UPLOAD_BYTES) throw new AppError("UPLOAD_TOO_LARGE", "知识点文件不能超过 512 KiB", 413);
+  let content: string;
+  try {
+    content = new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+  } catch {
+    throw new AppError("UPLOAD_INVALID", "知识点文件必须使用 UTF-8 编码");
+  }
+  if (!content.trim()) throw new AppError("UPLOAD_INVALID", "知识点文件不能为空");
+  return content;
 }
 
 export async function saveSource(input: {

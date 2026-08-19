@@ -23,12 +23,13 @@ wait_for_build() {
 
 printf '%s\n' 'IntegrationTest-Password-2026' | docker compose -f compose.dev.yaml exec -T app node dist/cli/create-admin.js --email admin@example.com
 curl --fail --silent --show-error -c "$COOKIE_FILE" -H 'Content-Type: application/json' -d '{"email":"admin@example.com","password":"IntegrationTest-Password-2026"}' "$BASE_URL/api/auth/login" > /dev/null
-curl --fail --silent --show-error -b "$COOKIE_FILE" -F 'title=肠道杆菌的分离培养与生化鉴定' -F 'slug=enterobacteria-identification' -F 'category=肠道杆菌' -F 'description=医学微生物学虚拟仿真实验' -F 'jsx=@samples/enterobacteria/App.jsx;type=text/jsx' "$BASE_URL/api/experiments" > "$RESPONSE_FILE"
+curl --fail --silent --show-error -b "$COOKIE_FILE" -F 'title=肠道杆菌的分离培养与生化鉴定' -F 'slug=enterobacteria-identification' -F 'category=肠道杆菌' -F 'description=医学微生物学虚拟仿真实验' -F 'knowledge=@samples/enterobacteria/KnowledgeReview.md;type=text/markdown' -F 'jsx=@samples/enterobacteria/App.jsx;type=text/jsx' "$BASE_URL/api/experiments" > "$RESPONSE_FILE"
 EXPERIMENT_ID="$(node -e 'const fs=require("fs");process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1],"utf8")).experimentId)' "$RESPONSE_FILE")"
 VERSION_ID="$(node -e 'const fs=require("fs");process.stdout.write(JSON.parse(fs.readFileSync(process.argv[1],"utf8")).versionId)' "$RESPONSE_FILE")"
 wait_for_build "$VERSION_ID"
 curl --fail --silent --show-error -b "$COOKIE_FILE" -X POST "$BASE_URL/api/versions/$VERSION_ID/publish" > /dev/null
 curl --fail --silent --show-error "$BASE_URL/api/public/experiments/enterobacteria-identification" | grep -q 'v000001'
+curl --fail --silent --show-error "$BASE_URL/api/public/experiments/enterobacteria-identification/knowledge-review" | grep -q '核心判断'
 
 # A cover is deliberately omitted: the student UI must use its deterministic generated theme.
 curl --fail --silent --show-error -b "$COOKIE_FILE" -F 'title=教学顺序演示实验' -F 'slug=teaching-order-demo' -F 'category=教学演示' -F 'description=用于验证无封面创建、教学排序、介绍页和二维码的自动化实验。' -F 'jsx=@samples/enterobacteria/App.jsx;type=text/jsx' "$BASE_URL/api/experiments" > "$RESPONSE_FILE"

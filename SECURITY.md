@@ -14,10 +14,11 @@ JSX 是可执行的浏览器代码，即使由可信教师上传，也可能包�
 6. 实验使用与平台不同的 Origin。管理 Session 是平台 host-only Cookie，不对实验子域开放。
 7. iframe 仅授予 `allow-scripts allow-forms`，无 same-origin、顶层导航、弹窗权限，并使用 `no-referrer`。
 8. 实验 CSP 默认阻止连接、对象、外部脚本和任意资源，仅为 Google Fonts 开放指定样式/字体域。
+9. 知识点仅接受限长 UTF-8 Markdown；浏览器解析原始 HTML 后必须经过 `rehype-sanitize` 白名单清洗，禁止脚本、事件属性和危险 URL 进入页面。
 
 ## 密钥与日志
 
-生产密钥只放 VPS `.env`，镜像、仓库和 Release 不包含令牌或上传资产。管理员密码使用 Argon2id；Session 只在数据库保存带服务器密钥的 HMAC，日志会脱敏 Cookie、Authorization 和 password。审计日志覆盖认证、创建、上传、发布、回滚、下架、归档与删除。
+生产密钥只放 VPS `.env`，镜像、仓库和 Release 不包含令牌或上传资产。管理员密码使用 Argon2id；Session 只在数据库保存带服务器密钥的 HMAC，日志会脱敏 Cookie、Authorization 和 password。审计日志覆盖认证、创建、上传、知识点更新、发布、回滚、下架、归档与删除。
 
 ## 漏洞报告
 

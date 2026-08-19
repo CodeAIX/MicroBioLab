@@ -6,7 +6,7 @@ import { AppError, assertSlug, formatVersion } from "@microbio/shared";
 import { config } from "./config.js";
 import { pool, transaction } from "./db.js";
 import { requireAdmin } from "./auth.js";
-import { decodeJsx, publishBuild, removeSourceVersion, saveCover, saveSource } from "./storage.js";
+import { decodeJsx, decodeKnowledgeReview, publishBuild, removeSourceVersion, saveCover, saveSource } from "./storage.js";
 import { newPreviewToken, safeRelativePath, sanitizeOriginalFilename, verifyPreviewToken } from "./security.js";
 import { multipartLimitError } from "./upload-errors.js";
 
@@ -14,21 +14,37 @@ async function audit(client: { query: (sql: string, values?: unknown[]) => Promi
   await client.query("INSERT INTO audit_logs(user_id,action,entity_type,entity_id,metadata) VALUES ($1,$2,$3,$4,$5)", [request.user?.id ?? null, action, entityType, entityId ?? null, JSON.stringify(metadata)]);
 }
 
-async function readMultipart(request: FastifyRequest): Promise<{ fields: Record<string, string>; filename: string; contents: Buffer; cover?: Buffer }> {
+type KnowledgeReviewUpload = { filename: string; content: string };
+
+async function readMultipart(
+  request: FastifyRequest,
+  options: { allowCover?: boolean; allowKnowledge?: boolean } = {},
+): Promise<{ fields: Record<string, string>; filename: string; contents: Buffer; cover?: Buffer; knowledge?: KnowledgeReviewUpload }> {
   const fields: Record<string, string> = {};
   let file: { filename: string; contents: Buffer } | undefined;
   let cover: Buffer | undefined;
+  let knowledge: KnowledgeReviewUpload | undefined;
   try {
     for await (const part of request.parts()) {
       if (part.type === "file") {
         if (part.fieldname === "cover") {
+          if (!options.allowCover) throw new AppError("UPLOAD_INVALID", "此处不允许上传封面");
           if (cover) throw new AppError("UPLOAD_INVALID", "只能上传一张封面");
           cover = await part.toBuffer();
-        } else {
-          if (file) throw new AppError("UPLOAD_INVALID", "V1 每次只允许上传一个 JSX 文件");
+        } else if (part.fieldname === "knowledge") {
+          if (!options.allowKnowledge) throw new AppError("UPLOAD_INVALID", "此处不允许上传知识点文件");
+          if (knowledge) throw new AppError("UPLOAD_INVALID", "只能上传一个知识点文件");
+          if (!part.filename.toLowerCase().endsWith(".md")) throw new AppError("UPLOAD_INVALID", "知识点只允许上传 .md 文件");
+          if (!["text/markdown", "text/plain", "application/octet-stream"].includes(part.mimetype)) throw new AppError("UPLOAD_INVALID", "知识点文件 MIME 类型不受支持");
+          knowledge = { filename: sanitizeOriginalFilename(part.filename), content: decodeKnowledgeReview(await part.toBuffer()) };
+        } else if (part.fieldname === "jsx") {
+          if (file) throw new AppError("UPLOAD_INVALID", "每次只允许上传一个 JSX 文件");
           if (!part.filename.toLowerCase().endsWith(".jsx")) throw new AppError("UPLOAD_INVALID", "只允许上传 .jsx 文件");
           if (!["text/jsx", "text/plain", "text/javascript", "application/javascript", "application/octet-stream"].includes(part.mimetype)) throw new AppError("UPLOAD_INVALID", "JSX 文件 MIME 类型不受支持");
           file = { filename: sanitizeOriginalFilename(part.filename), contents: await part.toBuffer() };
+        } else {
+          await part.toBuffer();
+          throw new AppError("UPLOAD_INVALID", `不支持的文件字段：${part.fieldname}`);
         }
       } else {
         fields[part.fieldname] = String(part.value);
@@ -39,7 +55,28 @@ async function readMultipart(request: FastifyRequest): Promise<{ fields: Record<
   }
   if (!file) throw new AppError("UPLOAD_INVALID", "请选择 JSX 文件");
   decodeJsx(file.contents);
-  return { fields, ...file, ...(cover?.byteLength ? { cover } : {}) };
+  return { fields, ...file, ...(cover?.byteLength ? { cover } : {}), ...(knowledge ? { knowledge } : {}) };
+}
+
+async function readKnowledgeReviewUpload(request: FastifyRequest): Promise<KnowledgeReviewUpload> {
+  let knowledge: KnowledgeReviewUpload | undefined;
+  try {
+    for await (const part of request.parts()) {
+      if (part.type !== "file") continue;
+      if (part.fieldname !== "knowledge") {
+        await part.toBuffer();
+        throw new AppError("UPLOAD_INVALID", "只允许上传一个知识点文件");
+      }
+      if (knowledge) throw new AppError("UPLOAD_INVALID", "只能上传一个知识点文件");
+      if (!part.filename.toLowerCase().endsWith(".md")) throw new AppError("UPLOAD_INVALID", "知识点只允许上传 .md 文件");
+      if (!["text/markdown", "text/plain", "application/octet-stream"].includes(part.mimetype)) throw new AppError("UPLOAD_INVALID", "知识点文件 MIME 类型不受支持");
+      knowledge = { filename: sanitizeOriginalFilename(part.filename), content: decodeKnowledgeReview(await part.toBuffer()) };
+    }
+  } catch (error) {
+    throw multipartLimitError(error) ?? error;
+  }
+  if (!knowledge) throw new AppError("UPLOAD_INVALID", "请选择知识点文件");
+  return knowledge;
 }
 
 async function readCoverUpload(request: FastifyRequest): Promise<Buffer> {
@@ -111,13 +148,26 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/public/experiments/:slug", async (request) => {
     const { slug } = request.params as { slug: string };
     const result = await pool.query(
-      `SELECT e.slug,e.title,e.description,e.category,e.cover_path,e.updated_at,v.version_number
+      `SELECT e.slug,e.title,e.description,e.category,e.cover_path,e.updated_at,v.version_number,
+       EXISTS(SELECT 1 FROM experiment_knowledge_reviews k WHERE k.experiment_id=e.id) AS has_knowledge_review
        FROM experiments e JOIN experiment_versions v ON v.id=e.active_version_id WHERE e.slug=$1 AND e.status='published'`,
       [slug],
     );
     if (!result.rowCount) throw new AppError("NOT_FOUND", "实验不存在或尚未发布", 404);
     const row = result.rows[0]!;
     return { experiment: { ...row, version: formatVersion(row.version_number as number), iframeUrl: `${config.experimentOrigin}/e/${row.slug as string}/${formatVersion(row.version_number as number)}/` } };
+  });
+
+  app.get("/api/public/experiments/:slug/knowledge-review", async (request) => {
+    const { slug } = request.params as { slug: string };
+    const result = await pool.query(
+      `SELECT k.content,k.updated_at
+       FROM experiment_knowledge_reviews k JOIN experiments e ON e.id=k.experiment_id
+       WHERE e.slug=$1 AND e.status='published'`,
+      [slug],
+    );
+    if (!result.rowCount) throw new AppError("NOT_FOUND", "该实验暂未提供知识点复习", 404);
+    return { knowledgeReview: result.rows[0] };
   });
 
   app.get("/covers/:filename", async (request, reply) => {
@@ -173,7 +223,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post("/api/experiments", { preHandler: requireAdmin }, async (request, reply) => {
-    const upload = await readMultipart(request);
+    const upload = await readMultipart(request, { allowCover: true, allowKnowledge: true });
     const title = upload.fields.title?.trim();
     if (!title || title.length > 200) throw new AppError("UPLOAD_INVALID", "实验标题必填且最长 200 个字符");
     const slug = assertSlug(upload.fields.slug ?? "");
@@ -186,6 +236,13 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
            SELECT $1,$2,$3,$4,$5,$6,$7,COALESCE(max(display_order),0)+10 FROM experiments`,
           [experimentId, slug, title, upload.fields.description?.slice(0, 4000) ?? "", upload.fields.category?.slice(0, 100) ?? "", coverPath, request.user!.id],
         );
+        if (upload.knowledge) {
+          await client.query(
+            `INSERT INTO experiment_knowledge_reviews(experiment_id,content,source_filename,updated_by)
+             VALUES ($1,$2,$3,$4)`,
+            [experimentId, upload.knowledge.content, upload.knowledge.filename, request.user!.id],
+          );
+        }
         await audit(client, request, "create_experiment", "experiment", experimentId, { slug });
       });
       const versionId = await createVersion(request, experimentId, 1, upload.filename, upload.contents);
@@ -200,7 +257,11 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/api/experiments/:id", { preHandler: requireAdmin }, async (request) => {
     const { id } = request.params as { id: string };
-    const result = await pool.query("SELECT * FROM experiments WHERE id=$1", [id]);
+    const result = await pool.query(
+      `SELECT e.*,k.content AS knowledge_review,k.source_filename AS knowledge_review_filename,k.updated_at AS knowledge_review_updated_at
+       FROM experiments e LEFT JOIN experiment_knowledge_reviews k ON k.experiment_id=e.id WHERE e.id=$1`,
+      [id],
+    );
     if (!result.rowCount) throw new AppError("NOT_FOUND", "实验不存在", 404);
     return { experiment: result.rows[0] };
   });
@@ -253,6 +314,35 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       await audit(client, request, "delete_cover", "experiment", id);
     });
     if (previousPath) await rm(path.join(config.coverRoot, safeRelativePath(previousPath)), { force: true });
+    return { ok: true };
+  });
+
+  app.post("/api/experiments/:id/knowledge-review", { preHandler: requireAdmin }, async (request) => {
+    const { id } = request.params as { id: string };
+    const knowledge = await readKnowledgeReviewUpload(request);
+    await transaction(async (client) => {
+      const found = await client.query("SELECT id FROM experiments WHERE id=$1 FOR UPDATE", [id]);
+      if (!found.rowCount) throw new AppError("NOT_FOUND", "实验不存在", 404);
+      await client.query(
+        `INSERT INTO experiment_knowledge_reviews(experiment_id,content,source_filename,updated_by)
+         VALUES ($1,$2,$3,$4)
+         ON CONFLICT (experiment_id) DO UPDATE SET content=EXCLUDED.content,source_filename=EXCLUDED.source_filename,updated_by=EXCLUDED.updated_by,updated_at=now()`,
+        [id, knowledge.content, knowledge.filename, request.user!.id],
+      );
+      await client.query("UPDATE experiments SET updated_at=now() WHERE id=$1", [id]);
+      await audit(client, request, "update_knowledge_review", "experiment", id, { sourceFilename: knowledge.filename });
+    });
+    return { ok: true };
+  });
+
+  app.delete("/api/experiments/:id/knowledge-review", { preHandler: requireAdmin }, async (request) => {
+    const { id } = request.params as { id: string };
+    await transaction(async (client) => {
+      const deleted = await client.query("DELETE FROM experiment_knowledge_reviews WHERE experiment_id=$1 RETURNING experiment_id", [id]);
+      if (!deleted.rowCount) throw new AppError("NOT_FOUND", "该实验没有知识点复习", 404);
+      await client.query("UPDATE experiments SET updated_at=now() WHERE id=$1", [id]);
+      await audit(client, request, "delete_knowledge_review", "experiment", id);
+    });
     return { ok: true };
   });
 

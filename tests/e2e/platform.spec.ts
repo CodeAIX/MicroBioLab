@@ -8,6 +8,12 @@ test("published sample opens inside the sandboxed experiment frame", async ({ pa
   await expect(page).toHaveURL(/\/experiments\/enterobacteria-identification$/);
   await expect(page.getByRole("heading", { name: "实验简介" })).toBeVisible();
   await expect(page.getByRole("img", { name: "实验二维码" })).toBeVisible();
+  await page.getByRole("button", { name: /知识点复习/ }).first().click();
+  const review = page.getByRole("dialog", { name: /肠道杆菌的分离培养与生化鉴定/ });
+  await expect(review.getByRole("heading", { name: /知识点复习 · 肠道杆菌/ })).toBeVisible();
+  await expect(review.getByText("核心判断", { exact: true })).toBeVisible();
+  await review.getByRole("button", { name: "复习完成" }).click();
+  await expect(review).toHaveCount(0);
   await page.getByRole("link", { name: /开始虚拟实验/ }).click();
   await expect(page).toHaveURL(/\/experiments\/enterobacteria-identification\/run$/);
   const frame = page.frameLocator("iframe");
@@ -24,6 +30,7 @@ test("administrator can log in and preview the immutable version", async ({ page
   await page.getByRole("link", { name: "▤ 实验管理", exact: true }).click();
   await page.getByRole("row").filter({ hasText: "肠道杆菌的分离培养与生化鉴定" }).getByRole("link", { name: "管理 →", exact: true }).click();
   await expect(page).toHaveURL(/\/admin\/experiments\/[0-9a-f-]+$/);
+  await expect(page.getByText("KnowledgeReview.md", { exact: true })).toBeVisible();
   await expect(page.locator(".version-list").getByText("v000001", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "预览", exact: true }).click();
   const frame = page.frameLocator('iframe[title="管理员预览"]');

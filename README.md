@@ -1,6 +1,6 @@
 # 医学微生物学虚拟仿真实验平台
 
-可部署到普通 Linux VPS 的医学微生物学虚拟仿真实验平台，用于安全上传、检查、构建、预览、发布和版本化管理单文件 React JSX 实验。平台软件与实验资产完全解耦；发布后的 `v000001` 等目录保持不可变，回滚只切换数据库中的生效版本。
+可部署到普通 Linux VPS 的医学微生物学虚拟仿真实验平台，用于安全上传、检查、构建、预览、发布和版本化管理单文件 React JSX 实验，并为每个实验配置 Markdown 知识点复习。平台软件与实验资产完全解耦；发布后的 `v000001` 等目录保持不可变，回滚只切换数据库中的生效版本。
 
 当前稳定版：[`v1.1.2`](https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.1.2)
 
@@ -9,6 +9,7 @@
 - 隔离检查与构建 JSX，不执行上传源码、不开放动态依赖安装；
 - 不可变版本、预览、发布、下架、归档和回滚；
 - 教学顺序、学生首页、实验介绍页、稳定运行地址和二维码；
+- 实验级 Markdown 知识点复习、按需加载的悬浮阅读页；
 - 可选封面、自动主题背景、实验与未发布版本删除；
 - Docker Compose、完整备份/恢复、升级/回滚和分级卸载；
 - 公开 GHCR 多架构镜像，可匿名拉取。
@@ -80,7 +81,7 @@ npm run test:e2e
 docker compose -f compose.dev.yaml down -v
 ```
 
-该流程真实上传 `samples/enterobacteria/App.jsx`，等待 Builder、发布、检查公共 API、无封面创建、教学排序和归档恢复，并以 Playwright 检查介绍页、二维码、实验 iframe、版本删除和实验永久删除。
+该流程真实上传 `samples/enterobacteria/App.jsx` 和知识点 Markdown，等待 Builder、发布、检查公共 API、无封面创建、教学排序和归档恢复，并以 Playwright 检查介绍页、知识点悬浮阅读、二维码、实验 iframe、版本删除和实验永久删除。
 
 ## 环境变量
 
@@ -102,6 +103,14 @@ openssl rand -hex 32
 - 上传代码绝不会触发 `npm install`。
 
 构建错误返回稳定代码，例如 `JSX_PARSE_ERROR`、`IMPORT_NOT_ALLOWED`、`SECURITY_BLOCKED`、`BUILD_FAILED`，后台展示中文说明和技术细节。
+
+## 知识点复习
+
+- 新建实验时可选上传实验包中的 UTF-8 `知识点复习.md`，最大 512 KiB；
+- 知识点属于实验本身，不随 JSX 版本发布或回滚，管理端可独立替换和删除；
+- 学生实验介绍页仅在已配置内容时显示“知识点复习”，点击后按需加载；
+- 支持常用 Markdown、GFM 表格、代码块及 `<details>/<summary>` 折叠答案；原始 HTML 经过白名单清洗后才渲染；
+- 内容存储在 PostgreSQL，现有数据库备份与恢复流程会自动包含知识点。
 
 ## 管理员 CLI
 
