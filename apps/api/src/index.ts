@@ -4,7 +4,7 @@ import cookie from "@fastify/cookie";
 import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import fastifyStatic from "@fastify/static";
-import { AppError, JSX_MAX_UPLOAD_BYTES } from "@microbio/shared";
+import { AppError, BATCH_JSX_MAX_FILES, JSX_MAX_UPLOAD_BYTES } from "@microbio/shared";
 import { config } from "./config.js";
 import { loadUser, originGuard, registerAuthRoutes, clearExpiredSessions } from "./auth.js";
 import { migrate, pool } from "./db.js";
@@ -16,7 +16,7 @@ export async function buildApp() {
   app.decorateRequest("user", null);
   await app.register(cookie);
   await app.register(rateLimit, { global: false });
-  await app.register(multipart, { limits: { files: 3, fileSize: JSX_MAX_UPLOAD_BYTES, fields: 10, parts: 13 } });
+  await app.register(multipart, { limits: { files: BATCH_JSX_MAX_FILES, fileSize: JSX_MAX_UPLOAD_BYTES, fields: 20, parts: BATCH_JSX_MAX_FILES + 20 } });
   app.addHook("onRequest", loadUser);
   app.addHook("preHandler", originGuard);
   app.addHook("onSend", async (request, reply, payload) => {

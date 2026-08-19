@@ -2,13 +2,14 @@ import { randomUUID } from "node:crypto";
 import { readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { AppError, assertSlug, formatVersion } from "@microbio/shared";
+import { AppError, assertSlug, BATCH_JSX_MAX_FILES, BATCH_JSX_MAX_TOTAL_BYTES, formatVersion, JSX_MAX_UPLOAD_BYTES } from "@microbio/shared";
 import { config } from "./config.js";
 import { pool, transaction } from "./db.js";
 import { requireAdmin } from "./auth.js";
-import { decodeJsx, decodeKnowledgeReview, publishBuild, removeSourceVersion, saveCover, saveSource } from "./storage.js";
-import { newPreviewToken, safeRelativePath, sanitizeOriginalFilename, verifyPreviewToken } from "./security.js";
+import { decodeJsx, decodeKnowledgeReview, measureVersionStorage, publishBuild, removeSourceVersion, saveCover, saveSource } from "./storage.js";
+import { newPreviewToken, safeRelativePath, sanitizeOriginalFilename, sha256, verifyPreviewToken } from "./security.js";
 import { multipartLimitError } from "./upload-errors.js";
+import { deriveBatchStatus, matchBatchFilename } from "./batch.js";
 
 async function audit(client: { query: (sql: string, values?: unknown[]) => Promise<unknown> }, request: FastifyRequest, action: string, entityType: string, entityId?: string, metadata: object = {}): Promise<void> {
   await client.query("INSERT INTO audit_logs(user_id,action,entity_type,entity_id,metadata) VALUES ($1,$2,$3,$4,$5)", [request.user?.id ?? null, action, entityType, entityId ?? null, JSON.stringify(metadata)]);
@@ -96,6 +97,55 @@ async function readCoverUpload(request: FastifyRequest): Promise<Buffer> {
   }
   if (!cover?.byteLength) throw new AppError("UPLOAD_INVALID", "请选择封面图片");
   return cover;
+}
+
+type BatchJsxUpload = { filename: string; contents: Buffer; digest: string };
+
+async function readBatchJsxUploads(request: FastifyRequest): Promise<BatchJsxUpload[]> {
+  const files: BatchJsxUpload[] = [];
+  let totalBytes = 0;
+  try {
+    for await (const part of request.parts()) {
+      if (part.type !== "file") throw new AppError("BATCH_UPLOAD_INVALID", "批量更新只接受 JSX 文件");
+      if (part.fieldname !== "jsx") {
+        await part.toBuffer();
+        throw new AppError("BATCH_UPLOAD_INVALID", `不支持的文件字段：${part.fieldname}`);
+      }
+      if (files.length >= BATCH_JSX_MAX_FILES) throw new AppError("BATCH_TOO_MANY_FILES", `每批最多上传 ${BATCH_JSX_MAX_FILES} 个 JSX 文件`, 413);
+      if (!part.filename.toLowerCase().endsWith(".jsx")) throw new AppError("BATCH_UPLOAD_INVALID", "批量更新只允许上传 .jsx 文件");
+      const contents = await part.toBuffer();
+      decodeJsx(contents);
+      totalBytes += contents.byteLength;
+      if (totalBytes > BATCH_JSX_MAX_TOTAL_BYTES) throw new AppError("BATCH_TOO_LARGE", "批量 JSX 总大小不能超过 100 MiB", 413);
+      files.push({ filename: sanitizeOriginalFilename(part.filename), contents, digest: sha256(contents) });
+    }
+  } catch (error) {
+    throw multipartLimitError(error) ?? error;
+  }
+  if (!files.length) throw new AppError("BATCH_UPLOAD_INVALID", "请选择至少一个 JSX 文件");
+  return files;
+}
+
+type BatchRow = {
+  id: string;
+  item_count: number;
+  created_at: string;
+  published_at?: string | null;
+  created_by_email?: string;
+  success_count: number;
+  failed_count: number;
+  pending_count: number;
+  missing_count: number;
+};
+
+function presentBatch(row: BatchRow) {
+  const statuses = [
+    ...Array(row.success_count).fill("success"),
+    ...Array(row.failed_count).fill("failed"),
+    ...Array(row.pending_count).fill("building"),
+    ...Array(row.missing_count).fill(null),
+  ];
+  return { ...row, status: deriveBatchStatus({ publishedAt: row.published_at, statuses }) };
 }
 
 async function createVersion(request: FastifyRequest, experimentId: string, requestedVersionNumber: number | null, filename: string, contents: Buffer): Promise<string> {
@@ -191,11 +241,231 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/api/experiments", { preHandler: requireAdmin }, async () => {
     const result = await pool.query(
-      `SELECT e.*,v.version_number AS active_version_number,
+      `SELECT e.*,v.version_number AS active_version_number,v.source_sha256 AS active_source_sha256,
+       v.created_at AS active_version_created_at,v.published_at AS active_version_published_at,
        (SELECT count(*)::int FROM experiment_versions ev WHERE ev.experiment_id=e.id) AS version_count
        FROM experiments e LEFT JOIN experiment_versions v ON v.id=e.active_version_id ORDER BY e.display_order,e.created_at`,
     );
     return { experiments: result.rows };
+  });
+
+  app.post("/api/batch-updates/preflight", { preHandler: requireAdmin }, async (request) => {
+    const body = (request.body ?? {}) as { files?: Array<{ filename?: unknown; relativePath?: unknown; size?: unknown; sha256?: unknown }> };
+    if (!Array.isArray(body.files) || body.files.length < 1 || body.files.length > BATCH_JSX_MAX_FILES) {
+      throw new AppError("BATCH_PREFLIGHT_INVALID", `请选择 1-${BATCH_JSX_MAX_FILES} 个 JSX 文件`);
+    }
+    const inputs = body.files.map((file, index) => {
+      const filename = typeof file.filename === "string" ? sanitizeOriginalFilename(file.filename) : "";
+      const relativePath = typeof file.relativePath === "string" ? file.relativePath.slice(0, 500) : filename;
+      const size = typeof file.size === "number" && Number.isSafeInteger(file.size) ? file.size : -1;
+      const digest = typeof file.sha256 === "string" ? file.sha256.toLowerCase() : "";
+      if (!filename || size < 0 || size > JSX_MAX_UPLOAD_BYTES || !/^[0-9a-f]{64}$/.test(digest)) {
+        throw new AppError("BATCH_PREFLIGHT_INVALID", `第 ${index + 1} 个文件信息不正确`);
+      }
+      return { index, filename, relativePath, size, digest };
+    });
+    if (inputs.reduce((total, file) => total + file.size, 0) > BATCH_JSX_MAX_TOTAL_BYTES) {
+      throw new AppError("BATCH_TOO_LARGE", "批量 JSX 总大小不能超过 100 MiB", 413);
+    }
+
+    const experiments = await pool.query(
+      `SELECT e.id,e.slug,e.title,e.status,e.active_version_id,
+       v.version_number AS active_version_number,v.source_sha256 AS active_source_sha256
+       FROM experiments e LEFT JOIN experiment_versions v ON v.id=e.active_version_id`,
+    );
+    const bySlug = new Map(experiments.rows.map((row) => [row.slug as string, row]));
+    const knownSlugs = new Set(bySlug.keys());
+    const provisional = inputs.map((file) => ({ file, match: matchBatchFilename(file.filename, knownSlugs) }));
+    const matched = provisional.filter((entry): entry is typeof entry & { match: { status: "matched"; slug: string } } => entry.match.status === "matched");
+    const slugCounts = new Map<string, number>();
+    for (const entry of matched) slugCounts.set(entry.match.slug, (slugCounts.get(entry.match.slug) ?? 0) + 1);
+    const digests = [...new Set(inputs.map((file) => file.digest))];
+    const existing = digests.length
+      ? await pool.query(
+        `SELECT experiment_id,id,version_number,source_sha256,status,published_at
+         FROM experiment_versions WHERE source_sha256=ANY($1::text[])`,
+        [digests],
+      )
+      : { rows: [] };
+    const existingByKey = new Map(existing.rows.map((row) => [`${row.experiment_id as string}:${row.source_sha256 as string}`, row]));
+
+    const files = provisional.map(({ file, match }) => {
+      if (match.status !== "matched") return { ...file, status: match.status, candidates: match.candidates };
+      const experiment = bySlug.get(match.slug)!;
+      const base = {
+        ...file,
+        slug: match.slug,
+        experimentId: experiment.id,
+        experimentTitle: experiment.title,
+        experimentStatus: experiment.status,
+        activeVersionNumber: experiment.active_version_number,
+      };
+      if ((slugCounts.get(match.slug) ?? 0) > 1) return { ...base, status: "duplicate_slug" };
+      if (experiment.active_source_sha256 === file.digest) return { ...base, status: "unchanged", existingVersionNumber: experiment.active_version_number };
+      const prior = existingByKey.get(`${experiment.id as string}:${file.digest}`);
+      if (prior) return { ...base, status: "existing_version", existingVersionNumber: prior.version_number, existingVersionStatus: prior.status };
+      return { ...base, status: "ready" };
+    });
+    return { files };
+  });
+
+  app.post("/api/batch-updates", { preHandler: requireAdmin }, async (request, reply) => {
+    const uploads = await readBatchJsxUploads(request);
+    const experiments = await pool.query("SELECT id,slug,title,active_version_id FROM experiments");
+    const bySlug = new Map(experiments.rows.map((row) => [row.slug as string, row]));
+    const knownSlugs = new Set(bySlug.keys());
+    const matched = uploads.map((upload) => ({ upload, match: matchBatchFilename(upload.filename, knownSlugs) }));
+    const invalid = matched.find((entry) => entry.match.status !== "matched");
+    if (invalid) throw new AppError("BATCH_MATCH_FAILED", `无法根据文件名匹配实验：${invalid.upload.filename}`, 409, invalid.match);
+    const plans = matched.map((entry) => ({ upload: entry.upload, experiment: bySlug.get((entry.match as { slug: string }).slug)! }));
+    const slugs = plans.map((plan) => plan.experiment.slug as string);
+    if (new Set(slugs).size !== slugs.length) throw new AppError("BATCH_DUPLICATE_SLUG", "同一批次中存在多个文件匹配相同 Slug", 409);
+    const experimentIds = plans.map((plan) => plan.experiment.id as string);
+    const digests = plans.map((plan) => plan.upload.digest);
+    const existing = await pool.query(
+      `SELECT experiment_id,version_number,source_sha256 FROM experiment_versions
+       WHERE experiment_id=ANY($1::uuid[]) AND source_sha256=ANY($2::text[])`,
+      [experimentIds, digests],
+    );
+    for (const plan of plans) {
+      const prior = existing.rows.find((row) => row.experiment_id === plan.experiment.id && row.source_sha256 === plan.upload.digest);
+      if (prior) throw new AppError("BATCH_VERSION_EXISTS", `${plan.experiment.slug as string} 的相同内容已存在于 ${formatVersion(prior.version_number as number)}`, 409);
+    }
+
+    const batchId = randomUUID();
+    const prepared = plans.map((plan) => ({ ...plan, versionId: randomUUID(), jobId: randomUUID() }));
+    const saved: Array<{ experimentId: string; versionId: string }> = [];
+    try {
+      for (const plan of prepared) {
+        await saveSource({
+          experimentId: plan.experiment.id as string,
+          versionId: plan.versionId,
+          originalFilename: plan.upload.filename,
+          contents: plan.upload.contents,
+          uploadedBy: request.user!.id,
+        });
+        saved.push({ experimentId: plan.experiment.id as string, versionId: plan.versionId });
+      }
+      await transaction(async (client) => {
+        const locked = await client.query("SELECT id FROM experiments WHERE id=ANY($1::uuid[]) ORDER BY id FOR UPDATE", [experimentIds]);
+        if (locked.rowCount !== experimentIds.length) throw new AppError("BATCH_STALE", "实验列表已发生变化，请重新预检", 409);
+        await client.query("INSERT INTO batch_updates(id,item_count,created_by) VALUES ($1,$2,$3)", [batchId, prepared.length, request.user!.id]);
+        for (const plan of prepared) {
+          const next = await client.query("SELECT COALESCE(max(version_number),0)::int+1 AS value FROM experiment_versions WHERE experiment_id=$1", [plan.experiment.id]);
+          const versionNumber = next.rows[0]!.value as number;
+          const sourcePath = `${plan.experiment.id as string}/${plan.versionId}/App.jsx`;
+          await client.query(
+            `INSERT INTO experiment_versions(id,experiment_id,version_number,source_filename,source_path,source_sha256,created_by)
+             VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+            [plan.versionId, plan.experiment.id, versionNumber, plan.upload.filename, sourcePath, plan.upload.digest, request.user!.id],
+          );
+          await client.query("INSERT INTO build_jobs(id,version_id) VALUES ($1,$2)", [plan.jobId, plan.versionId]);
+          await client.query(
+            `INSERT INTO batch_update_items(batch_id,experiment_id,version_id,previous_active_version_id,source_filename,source_sha256)
+             VALUES ($1,$2,$3,$4,$5,$6)`,
+            [batchId, plan.experiment.id, plan.versionId, plan.experiment.active_version_id ?? null, plan.upload.filename, plan.upload.digest],
+          );
+        }
+        await audit(client, request, "create_batch_update", "batch_update", batchId, { count: prepared.length, slugs });
+      });
+    } catch (error) {
+      await Promise.all(saved.map((item) => removeSourceVersion(item.experimentId, item.versionId)));
+      throw error;
+    }
+    return reply.code(201).send({ batchId, itemCount: prepared.length });
+  });
+
+  app.get("/api/batch-updates", { preHandler: requireAdmin }, async (request) => {
+    const query = request.query as { limit?: string };
+    const limit = Math.min(Math.max(Number(query.limit ?? 10) || 10, 1), 50);
+    const result = await pool.query(
+      `SELECT b.id,b.item_count,b.created_at,b.published_at,u.email AS created_by_email,
+       count(*) FILTER (WHERE v.status='success')::int AS success_count,
+       count(*) FILTER (WHERE v.status='failed')::int AS failed_count,
+       count(*) FILTER (WHERE v.id IS NOT NULL AND v.status NOT IN ('success','failed'))::int AS pending_count,
+       count(*) FILTER (WHERE v.id IS NULL)::int AS missing_count
+       FROM batch_updates b JOIN batch_update_items i ON i.batch_id=b.id
+       LEFT JOIN experiment_versions v ON v.id=i.version_id LEFT JOIN users u ON u.id=b.created_by
+       GROUP BY b.id,u.email ORDER BY b.created_at DESC LIMIT $1`,
+      [limit],
+    );
+    return { batches: result.rows.map((row) => presentBatch(row as BatchRow)) };
+  });
+
+  app.get("/api/batch-updates/:id", { preHandler: requireAdmin }, async (request) => {
+    const { id } = request.params as { id: string };
+    const batch = await pool.query(
+      `SELECT b.id,b.item_count,b.created_at,b.published_at,u.email AS created_by_email,
+       count(*) FILTER (WHERE v.status='success')::int AS success_count,
+       count(*) FILTER (WHERE v.status='failed')::int AS failed_count,
+       count(*) FILTER (WHERE v.id IS NOT NULL AND v.status NOT IN ('success','failed'))::int AS pending_count,
+       count(*) FILTER (WHERE v.id IS NULL)::int AS missing_count
+       FROM batch_updates b JOIN batch_update_items i ON i.batch_id=b.id
+       LEFT JOIN experiment_versions v ON v.id=i.version_id LEFT JOIN users u ON u.id=b.created_by
+       WHERE b.id=$1 GROUP BY b.id,u.email`,
+      [id],
+    );
+    if (!batch.rowCount) throw new AppError("NOT_FOUND", "批量更新记录不存在", 404);
+    const items = await pool.query(
+      `SELECT i.experiment_id,i.version_id,i.previous_active_version_id,i.source_filename,i.source_sha256,
+       e.slug,e.title,v.version_number,v.status,v.created_at,v.built_at,v.published_at,
+       j.status AS job_status,j.error_code,j.error_message
+       FROM batch_update_items i JOIN experiments e ON e.id=i.experiment_id
+       LEFT JOIN experiment_versions v ON v.id=i.version_id LEFT JOIN build_jobs j ON j.version_id=v.id
+       WHERE i.batch_id=$1 ORDER BY e.display_order,e.created_at`,
+      [id],
+    );
+    return { batch: presentBatch(batch.rows[0] as BatchRow), items: items.rows };
+  });
+
+  app.post("/api/batch-updates/:id/publish", { preHandler: requireAdmin }, async (request) => {
+    const { id } = request.params as { id: string };
+    const initial = await pool.query(
+      `SELECT b.published_at,i.experiment_id,i.version_id,i.previous_active_version_id,
+       e.slug,e.active_version_id,v.version_number,v.status,v.build_path,v.source_sha256
+       FROM batch_updates b JOIN batch_update_items i ON i.batch_id=b.id
+       JOIN experiments e ON e.id=i.experiment_id LEFT JOIN experiment_versions v ON v.id=i.version_id
+       WHERE b.id=$1 ORDER BY e.id`,
+      [id],
+    );
+    if (!initial.rowCount) throw new AppError("NOT_FOUND", "批量更新记录不存在", 404);
+    if (initial.rows[0]!.published_at) return { ok: true, alreadyPublished: true };
+    if (initial.rows.some((row) => row.status !== "success" || !row.build_path)) {
+      throw new AppError("BATCH_NOT_READY", "只有全部版本构建成功后才能整体发布", 409);
+    }
+    const staged: Array<{ path: string; created: boolean }> = [];
+    try {
+      for (const row of initial.rows) {
+        const published = await publishBuild({ slug: row.slug as string, versionNumber: row.version_number as number, buildPath: row.build_path as string, sourceSha256: row.source_sha256 as string });
+        staged.push({ path: published.publishedPath, created: published.created });
+      }
+      await transaction(async (client) => {
+        const batch = await client.query("SELECT published_at FROM batch_updates WHERE id=$1 FOR UPDATE", [id]);
+        if (!batch.rowCount) throw new AppError("NOT_FOUND", "批量更新记录不存在", 404);
+        if (batch.rows[0]!.published_at) return;
+        const rows = await client.query(
+          `SELECT i.experiment_id,i.version_id,i.previous_active_version_id,e.active_version_id,v.status
+           FROM batch_update_items i JOIN experiments e ON e.id=i.experiment_id
+           JOIN experiment_versions v ON v.id=i.version_id WHERE i.batch_id=$1
+           ORDER BY e.id FOR UPDATE OF e,v`,
+          [id],
+        );
+        if (rows.rows.some((row) => row.status !== "success")) throw new AppError("BATCH_NOT_READY", "批次版本状态已发生变化", 409);
+        if (rows.rows.some((row) => (row.active_version_id ?? null) !== (row.previous_active_version_id ?? null))) {
+          throw new AppError("BATCH_STALE", "批次创建后已有实验被单独发布，请重新建立批次", 409);
+        }
+        for (const row of rows.rows) {
+          await client.query("UPDATE experiments SET active_version_id=$2,status='published',slug_locked=true,updated_at=now() WHERE id=$1", [row.experiment_id, row.version_id]);
+          await client.query("UPDATE experiment_versions SET published_at=COALESCE(published_at,now()) WHERE id=$1", [row.version_id]);
+        }
+        await client.query("UPDATE batch_updates SET status='published',published_at=now() WHERE id=$1", [id]);
+        await audit(client, request, "publish_batch_update", "batch_update", id, { count: rows.rowCount });
+      });
+    } catch (error) {
+      await Promise.all(staged.filter((item) => item.created).map((item) => rm(path.join(config.publishedRoot, safeRelativePath(item.path)), { recursive: true, force: true })));
+      throw error;
+    }
+    return { ok: true };
   });
 
   app.put("/api/experiments/order", { preHandler: requireAdmin }, async (request) => {
@@ -360,6 +630,54 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     const upload = await readMultipart(request);
     const versionId = await createVersion(request, id, null, upload.filename, upload.contents);
     return reply.code(201).send({ versionId });
+  });
+
+  app.get("/api/versions/cleanup-candidates", { preHandler: requireAdmin }, async () => {
+    const result = await pool.query(
+      `SELECT v.id,v.experiment_id,v.version_number,v.status,v.source_filename,v.created_at,v.built_at,
+       e.slug,e.title,j.status AS job_status
+       FROM experiment_versions v JOIN experiments e ON e.id=v.experiment_id
+       LEFT JOIN build_jobs j ON j.version_id=v.id
+       WHERE v.published_at IS NULL AND e.active_version_id IS DISTINCT FROM v.id
+       AND v.status NOT IN ('queued','building') AND COALESCE(j.status,'failed') NOT IN ('queued','running')
+       ORDER BY v.created_at LIMIT 500`,
+    );
+    const candidates = [];
+    for (const row of result.rows) {
+      const sizes = await measureVersionStorage(row.experiment_id as string, row.id as string);
+      candidates.push({ ...row, source_bytes: sizes.sourceBytes, build_bytes: sizes.buildBytes, total_bytes: sizes.sourceBytes + sizes.buildBytes });
+    }
+    return { candidates, truncated: result.rowCount === 500 };
+  });
+
+  app.post("/api/versions/bulk-delete", { preHandler: requireAdmin }, async (request) => {
+    const body = (request.body ?? {}) as { versionIds?: unknown };
+    const versionIds = body.versionIds;
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!Array.isArray(versionIds) || versionIds.length < 1 || versionIds.length > 500 || versionIds.some((id) => typeof id !== "string" || !uuid.test(id))) {
+      throw new AppError("BULK_DELETE_INVALID", "请选择 1-500 个可清理版本");
+    }
+    if (new Set(versionIds).size !== versionIds.length) throw new AppError("BULK_DELETE_INVALID", "待清理版本中存在重复项");
+    const deleted = await transaction(async (client) => {
+      const found = await client.query(
+        `SELECT v.id,v.experiment_id,v.published_at,v.status,e.active_version_id,j.status AS job_status
+         FROM experiment_versions v JOIN experiments e ON e.id=v.experiment_id
+         LEFT JOIN build_jobs j ON j.version_id=v.id
+         WHERE v.id=ANY($1::uuid[]) ORDER BY v.id FOR UPDATE OF v,e`,
+        [versionIds],
+      );
+      if (found.rowCount !== versionIds.length) throw new AppError("BULK_DELETE_STALE", "部分版本已不存在，请刷新候选列表", 409);
+      const unsafe = found.rows.find((row) => row.active_version_id === row.id || row.published_at || ["queued", "building"].includes(row.status as string) || ["queued", "running"].includes(row.job_status as string));
+      if (unsafe) throw new AppError("BULK_DELETE_UNSAFE", "所选版本中包含当前、已发布或构建中的版本", 409);
+      await audit(client, request, "bulk_delete_versions", "experiment_version", undefined, { count: versionIds.length, versionIds });
+      await client.query("DELETE FROM experiment_versions WHERE id=ANY($1::uuid[])", [versionIds]);
+      return found.rows;
+    });
+    await Promise.all(deleted.flatMap((row) => [
+      removeSourceVersion(row.experiment_id as string, row.id as string),
+      rm(path.join(config.buildRoot, row.id as string), { recursive: true, force: true }),
+    ]));
+    return { ok: true, deletedCount: deleted.length };
   });
 
   app.get("/api/versions/:id", { preHandler: requireAdmin }, async (request) => {

@@ -17,6 +17,7 @@ MicroBio Lab 维护命令
   mbl version                 查看当前平台与 Builder 版本
   mbl backup                  创建完整备份
   mbl backups                 列出本机备份
+  mbl storage                 查看在线资产与本机备份占用
   mbl start                   启动平台并检查健康状态
   mbl restart                 重启平台并检查健康状态
   mbl stop                    确认后停止平台
@@ -51,7 +52,7 @@ confirm() {
 
 validate_version() {
   if [[ ! "$1" =~ $VERSION_PATTERN ]]; then
-    echo "版本格式无效：$1；应类似 v1.3.0" >&2
+    echo "版本格式无效：$1；应类似 v1.4.0" >&2
     return 1
   fi
 }
@@ -59,7 +60,7 @@ validate_version() {
 prompt_version() {
   local action="$1"
   local version
-  read -r -p "请输入要${action}的版本（例如 v1.3.0）：" version
+  read -r -p "请输入要${action}的版本（例如 v1.4.0）：" version
   validate_version "$version" || return 1
   printf '%s\n' "$version"
 }
@@ -93,6 +94,22 @@ list_backups() {
     printf '%s\n' "$backup"
   done < <(find "$backup_root" -mindepth 1 -maxdepth 1 -type d ! -name '.partial-*' -print | sort -r)
   if [[ "$found" == false ]]; then echo "尚无备份。"; fi
+}
+
+show_storage() {
+  local data_root
+  data_root="$(sed -n 's/^DATA_ROOT=//p' .env | head -n1)"
+  if [[ -z "$data_root" || ! -d "$data_root" ]]; then
+    echo "数据目录不存在：${data_root:-未配置}" >&2
+    return 1
+  fi
+  echo "数据目录：$data_root"
+  for asset in postgres sources builds published covers backups; do
+    if [[ -e "$data_root/$asset" ]]; then du -sh -- "$data_root/$asset"; fi
+  done
+  if [[ -d "$data_root/backups" ]]; then
+    echo "本机备份数：$(find "$data_root/backups" -mindepth 1 -maxdepth 1 -type d ! -name '.partial-*' | wc -l | tr -d ' ')"
+  fi
 }
 
 stop_platform() {
@@ -178,6 +195,7 @@ run_command() {
     version) show_version ;;
     backup) "$SCRIPT_DIR/backup.sh" ;;
     backups) list_backups ;;
+    storage) show_storage ;;
     start)
       docker compose up -d
       "$SCRIPT_DIR/healthcheck.sh"
@@ -244,9 +262,10 @@ interactive_menu() {
  10) 回滚镜像版本
  11) 从备份恢复
  12) 卸载或永久删除
+ 13) 查看存储占用
   0) 退出
 EOF
-    read -r -p "请选择 [0-12]：" choice
+    read -r -p "请选择 [0-13]：" choice
     echo
     case "$choice" in
       1) run_command status || true ;;
@@ -273,6 +292,7 @@ EOF
         [[ -n "$backup" ]] && run_command restore "$backup" || true
         ;;
       12) uninstall_menu || true ;;
+      13) run_command storage || true ;;
       0) echo "已退出。"; return 0 ;;
       *) echo "无效选项，请重新选择。" ;;
     esac

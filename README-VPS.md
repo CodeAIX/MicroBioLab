@@ -1,6 +1,6 @@
 # VPS 部署与运维
 
-本文以公开版本 `v1.3.0` 为例，适用于 Ubuntu/Debian VPS。生产环境固定使用不可变的 `vX.Y.Z` 镜像标签，不建议直接使用 `latest`。
+本文以公开版本 `v1.4.0` 为例，适用于 Ubuntu/Debian VPS。生产环境固定使用不可变的 `vX.Y.Z` 镜像标签，不建议直接使用 `latest`。
 
 平台只监听 VPS 本机：
 
@@ -55,7 +55,7 @@ docker compose version
 已安装 Docker Engine 与 Docker Compose Plugin 的全新 VPS，可以使用固定版本标签下载引导式部署脚本。不要直接执行 `main` 分支脚本，也不建议使用 `curl | sudo bash`：
 
 ```bash
-INSTALL_VERSION="v1.3.0"
+INSTALL_VERSION="v1.4.0"
 curl -fL \
   "https://raw.githubusercontent.com/CodeAIX/MicroBioLab/${INSTALL_VERSION}/scripts/bootstrap.sh" \
   -o /tmp/microbio-bootstrap.sh
@@ -74,7 +74,7 @@ sudo bash /tmp/microbio-bootstrap.sh \
 需要手工控制每一步时，使用下面的传统安装流程：
 
 ```bash
-INSTALL_VERSION="v1.3.0"
+INSTALL_VERSION="v1.4.0"
 
 sudo install -d -o "$(id -u)" -g "$(id -g)" /opt/microbio-lab
 git clone --branch "$INSTALL_VERSION" --depth 1 \
@@ -100,8 +100,8 @@ cp .env.example .env
 chmod 600 .env
 sed -i \
   -e 's|^GHCR_OWNER=.*|GHCR_OWNER=codeaix|' \
-  -e 's|^PLATFORM_VERSION=.*|PLATFORM_VERSION=v1.3.0|' \
-  -e 's|^BUILDER_VERSION=.*|BUILDER_VERSION=v1.3.0|' \
+  -e 's|^PLATFORM_VERSION=.*|PLATFORM_VERSION=v1.4.0|' \
+  -e 's|^BUILDER_VERSION=.*|BUILDER_VERSION=v1.4.0|' \
   -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${DB_PASSWORD}|" \
   -e "s|^DATABASE_URL=.*|DATABASE_URL=postgresql://microbio:${DB_PASSWORD}@db:5432/microbio|" \
   -e "s|^SESSION_SECRET=.*|SESSION_SECRET=${SESSION_SECRET}|" \
@@ -143,8 +143,8 @@ exp.lab.example.com  -> HTTP -> 127.0.0.1:18081
 匿名拉取指定版本：
 
 ```bash
-docker pull ghcr.io/codeaix/microbio-lab-app:v1.3.0
-docker pull ghcr.io/codeaix/microbio-lab-builder:v1.3.0
+docker pull ghcr.io/codeaix/microbio-lab-app:v1.4.0
+docker pull ghcr.io/codeaix/microbio-lab-builder:v1.4.0
 ```
 
 生产部署应把 `.env` 中两个版本变量设为同一个不可变版本：
@@ -161,7 +161,7 @@ grep -E '^(PLATFORM_VERSION|BUILDER_VERSION)=' /opt/microbio-lab/.env
 
 ```bash
 cd /opt/microbio-lab
-TARGET_VERSION="v1.3.0"
+TARGET_VERSION="v1.4.0"
 DOWNLOAD_DIR="$(mktemp -d)"
 
 curl -fL \
@@ -181,7 +181,7 @@ rm -rf -- "$DOWNLOAD_DIR"
 升级到包含统一维护命令的版本后，后续标准升级可直接执行：
 
 ```bash
-sudo mbl upgrade v1.3.0
+sudo mbl upgrade v1.4.0
 ```
 
 该命令同样会下载并校验 GitHub Release、备份 `/opt/microbio-lab` 部署文件，再调用目标版本的升级脚本；不是只切换镜像标签。
@@ -194,11 +194,13 @@ sudo mbl upgrade v1.3.0
 4. 重建 App/Builder，自动执行增量数据库迁移；
 5. 最多等待约 60 秒完成健康检查。
 
+升级到 v1.4.0 后，App 启动时会自动执行 `004_batch_updates.sql`。登录管理端后可在“实验管理”使用目录批量更新与安全版本清理；无需手工执行 SQL。批量更新文件名须为 `<slug>-vsim.jsx` 或 `<slug>.jsx`，并应先观察所有构建成功，再确认整体发布。
+
 如果确认目标版本不涉及 Compose、Nginx 或脚本变化，也可以只执行：
 
 ```bash
 cd /opt/microbio-lab
-sudo ./scripts/upgrade.sh v1.3.0
+sudo ./scripts/upgrade.sh v1.4.0
 ```
 
 ## 6. 日常维护
@@ -209,7 +211,7 @@ sudo ./scripts/upgrade.sh v1.3.0
 sudo mbl
 ```
 
-菜单包含状态、健康检查、实时日志、备份、备份列表、启停、重启、标准升级、镜像回滚和备份恢复。也支持适合复制粘贴或自动化的参数模式：
+菜单包含状态、健康检查、实时日志、备份、备份列表、存储占用、启停、重启、标准升级、镜像回滚和备份恢复。也支持适合复制粘贴或自动化的参数模式：
 
 ```bash
 sudo mbl status
@@ -217,6 +219,7 @@ sudo mbl health
 sudo mbl logs app
 sudo mbl backup
 sudo mbl backups
+sudo mbl storage
 sudo mbl restart
 sudo mbl uninstall
 sudo mbl help

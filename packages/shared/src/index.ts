@@ -1,6 +1,8 @@
 export const EXPERIMENT_STATUSES = ["draft", "published", "hidden", "archived"] as const;
 export const VERSION_STATUSES = ["queued", "building", "success", "failed"] as const;
 export const JSX_MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+export const BATCH_JSX_MAX_FILES = 100;
+export const BATCH_JSX_MAX_TOTAL_BYTES = 100 * 1024 * 1024;
 export const COVER_MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
 export const KNOWLEDGE_REVIEW_MAX_UPLOAD_BYTES = 512 * 1024;
 export type ExperimentStatus = (typeof EXPERIMENT_STATUSES)[number];

@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { AppError, COVER_MAX_UPLOAD_BYTES, formatVersion, JSX_MAX_UPLOAD_BYTES, KNOWLEDGE_REVIEW_MAX_UPLOAD_BYTES } from "@microbio/shared";
@@ -54,6 +54,30 @@ export async function saveSource(input: {
 
 export async function removeSourceVersion(experimentId: string, versionId: string): Promise<void> {
   await rm(path.join(config.sourceRoot, safeRelativePath(`${experimentId}/${versionId}`)), { recursive: true, force: true });
+}
+
+async function directoryBytes(directory: string): Promise<number> {
+  try {
+    const entries = await readdir(directory, { withFileTypes: true });
+    let total = 0;
+    for (const entry of entries) {
+      const target = path.join(directory, entry.name);
+      if (entry.isDirectory()) total += await directoryBytes(target);
+      else if (entry.isFile()) total += (await stat(target)).size;
+    }
+    return total;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return 0;
+    throw error;
+  }
+}
+
+export async function measureVersionStorage(experimentId: string, versionId: string): Promise<{ sourceBytes: number; buildBytes: number }> {
+  const [sourceBytes, buildBytes] = await Promise.all([
+    directoryBytes(path.join(config.sourceRoot, safeRelativePath(`${experimentId}/${versionId}`))),
+    directoryBytes(path.join(config.buildRoot, safeRelativePath(versionId))),
+  ]);
+  return { sourceBytes, buildBytes };
 }
 
 export async function saveCover(contents: Buffer): Promise<string> {

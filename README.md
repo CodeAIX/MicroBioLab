@@ -2,7 +2,7 @@
 
 可部署到普通 Linux VPS 的医学微生物学虚拟仿真实验平台，用于安全上传、检查、构建、预览、发布和版本化管理单文件 React JSX 实验，并为每个实验配置 Markdown 知识点复习。平台软件与实验资产完全解耦；发布后的 `v000001` 等目录保持不可变，回滚只切换数据库中的生效版本。
 
-当前稳定版：[`v1.3.0`](https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.3.0)
+当前稳定版：[`v1.4.0`](https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.4.0)
 
 主要能力：
 
@@ -10,15 +10,17 @@
 - 不可变版本、预览、发布、下架、归档和回滚；
 - 教学顺序、学生首页、实验介绍页、稳定运行地址和二维码；
 - 实验级 Markdown 知识点复习、按需加载的悬浮阅读页；
-- 可选封面、自动主题背景、实验与未发布版本删除；
+- 按 Slug 从目录及子目录批量预检、构建和整体发布 JSX；
+- 可选封面、自动主题背景、实验删除与安全批量清理未发布版本；
+- 管理端显示精确到秒的上传、构建、发布和模块更新时间；
 - Docker Compose、完整备份/恢复、升级/回滚和分级卸载；
 - 公开 GHCR 多架构镜像，可匿名拉取。
 
 ## 快速部署
 
 ```bash
-docker pull ghcr.io/codeaix/microbio-lab-app:v1.3.0
-docker pull ghcr.io/codeaix/microbio-lab-builder:v1.3.0
+docker pull ghcr.io/codeaix/microbio-lab-app:v1.4.0
+docker pull ghcr.io/codeaix/microbio-lab-builder:v1.4.0
 ```
 
 镜像只负责 App/Builder，完整部署还需要仓库中的 `compose.yaml`、`.env`、PostgreSQL 和实验静态站。请按 [VPS 部署与运维](README-VPS.md) 完成安装，不要直接手写 `docker run`。
@@ -26,7 +28,7 @@ docker pull ghcr.io/codeaix/microbio-lab-builder:v1.3.0
 已安装 Docker Engine 与 Compose Plugin 的全新 VPS 可下载不可变标签中的引导式部署脚本；脚本会继续下载并校验正式 Release，而不是直接使用 `main`：
 
 ```bash
-INSTALL_VERSION="v1.3.0"
+INSTALL_VERSION="v1.4.0"
 curl -fL "https://raw.githubusercontent.com/CodeAIX/MicroBioLab/${INSTALL_VERSION}/scripts/bootstrap.sh" -o /tmp/microbio-bootstrap.sh
 sudo bash /tmp/microbio-bootstrap.sh "$INSTALL_VERSION"
 ```
@@ -89,7 +91,7 @@ npm run test:e2e
 docker compose -f compose.dev.yaml down -v
 ```
 
-该流程真实上传 `samples/enterobacteria/App.jsx` 和知识点 Markdown，等待 Builder、发布、检查公共 API、无封面创建、教学排序和归档恢复，并以 Playwright 检查介绍页、知识点悬浮阅读、二维码、实验 iframe、版本删除和实验永久删除。
+该流程真实上传 `samples/enterobacteria/App.jsx` 和知识点 Markdown，等待 Builder、发布、检查公共 API、无封面创建、教学排序和归档恢复，并覆盖目录批量预检、批量构建、整体发布、安全批量清理。Playwright 继续检查介绍页、知识点悬浮阅读、二维码、实验 iframe 和管理操作。
 
 ## 环境变量
 
@@ -120,6 +122,15 @@ openssl rand -hex 32
 - 支持常用 Markdown、GFM 表格、代码块及 `<details>/<summary>` 折叠答案；原始 HTML 经过白名单清洗后才渲染；
 - 内容存储在 PostgreSQL，现有数据库备份与恢复流程会自动包含知识点。
 
+## 批量更新与版本清理
+
+- 在“实验管理”点击“批量更新 JSX”，选择包含实验包的目录；浏览器会递归读取子目录中的 `.jsx`；
+- 文件名使用 `<slug>-vsim.jsx` 或 `<slug>.jsx`。预检会列出无匹配、重复、内容未变和历史版本已存在的文件，只有“可更新”项能够提交；
+- 每批最多 100 个文件、总计 100 MiB，单个 JSX 仍不得超过 10 MiB；文件上传后各自进入隔离 Builder；
+- 全部构建成功后才出现“一次性发布”。发布会锁定并复核所有模块，在一个数据库事务中整体切换；任一失败或期间发生单独发布，线上版本均不会被本批次部分替换；
+- “清理未发布版本”只列出非当前、从未发布且不在构建中的版本，并显示预计释放空间。发布过的历史版本继续保留，确保可以回滚；
+- `sudo mbl storage` 可查看源码、构建、已发布资产和本机备份的宿主机占用。
+
 ## 管理员 CLI
 
 生产容器内执行：
@@ -137,7 +148,7 @@ docker compose exec app node dist/cli/disable-admin.js --email admin@example.com
 
 生产数据固定在 `/srv/microbio-lab`；配置固定在 `/opt/microbio-lab`。原始 JSX 位于 `sources/<experiment_uuid>/<version_uuid>/App.jsx`，构建位于 `builds/<version_uuid>`，发布目录为 `published/<slug>/v000001`。发布先复制到临时目录、逐文件校验 manifest SHA256，再原子 rename 并更新数据库。
 
-实验第一次发布后 Slug 锁定。发布旧版本就是回滚，不重建也不删除新版本。默认管理动作是下架或归档；永久删除要求先归档并输入完整 Slug，当前生效版本不能单独删除。
+实验第一次发布后 Slug 锁定。发布旧版本就是回滚，不重建也不删除新版本。默认管理动作是下架或归档；永久删除要求先归档并输入完整 Slug。当前版本和发布过的历史版本不能单独或批量删除；从未发布且已停止构建的非当前版本可以清理。
 
 学生首页按后台保存的教学顺序展示。点击实验先进入介绍页，正式实验使用稳定地址 `/experiments/<slug>/run`；二维码也指向该地址，因此后续发布新版不需要重新制作二维码。封面图片可选，不上传时由 Slug 稳定生成主题色块；后台可随时替换或删除封面。
 
@@ -148,17 +159,17 @@ docker compose exec app node dist/cli/disable-admin.js --email admin@example.com
 推送 `v*` 标签后，`release.yml` 在完整 CI 通过后发布 amd64/arm64 镜像：
 
 ```text
-ghcr.io/<owner>/microbio-lab-app:v1.3.0
-ghcr.io/<owner>/microbio-lab-builder:v1.3.0
+ghcr.io/<owner>/microbio-lab-app:v1.4.0
+ghcr.io/<owner>/microbio-lab-builder:v1.4.0
 ```
 
-同时生成 `1.2`、`1`、`sha-*`，稳定版本更新 `latest`，并创建带 Compose、环境样例、基础设施、脚本和校验和的 GitHub Release。仓库不保存 PAT，Actions 使用最小权限 `GITHUB_TOKEN`。
+同时生成 `1.4`、`1`、`sha-*`，稳定版本更新 `latest`，并创建带 Compose、环境样例、基础设施、脚本和校验和的 GitHub Release。仓库不保存 PAT，Actions 使用最小权限 `GITHUB_TOKEN`。
 
 两个 GHCR Package 均为公开镜像，可匿名拉取：
 
 ```bash
-docker pull ghcr.io/codeaix/microbio-lab-app:v1.3.0
-docker pull ghcr.io/codeaix/microbio-lab-builder:v1.3.0
+docker pull ghcr.io/codeaix/microbio-lab-app:v1.4.0
+docker pull ghcr.io/codeaix/microbio-lab-builder:v1.4.0
 ```
 
 ## VPS 运维
@@ -176,7 +187,8 @@ sudo mbl status
 sudo mbl health
 sudo mbl logs app
 sudo mbl backup
-sudo mbl upgrade v1.3.0
+sudo mbl storage
+sudo mbl upgrade v1.4.0
 sudo mbl uninstall
 sudo mbl help
 ```

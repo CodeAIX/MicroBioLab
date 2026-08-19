@@ -1,20 +1,21 @@
-import { createContext, lazy, Suspense, useContext, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { createContext, lazy, Suspense, useContext, useEffect, useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import { Link, Navigate, NavLink, Route, Routes, useNavigate, useParams } from "react-router-dom";
 import QRCode from "qrcode";
-import { COVER_MAX_UPLOAD_BYTES, JSX_MAX_UPLOAD_BYTES, KNOWLEDGE_REVIEW_MAX_UPLOAD_BYTES } from "@microbio/shared";
+import { BATCH_JSX_MAX_FILES, BATCH_JSX_MAX_TOTAL_BYTES, COVER_MAX_UPLOAD_BYTES, JSX_MAX_UPLOAD_BYTES, KNOWLEDGE_REVIEW_MAX_UPLOAD_BYTES } from "@microbio/shared";
 import { api, ApiClientError } from "./api";
 
 type User = { id: string; email: string; role: "ADMIN" };
 type Experiment = {
   id: string; slug: string; slug_locked: boolean; title: string; description: string; category: string;
   cover_path?: string; status: string; display_order: number; active_version_id?: string;
-  active_version_number?: number; version_count?: number; updated_at: string; knowledge_review?: string;
+  active_version_number?: number; active_source_sha256?: string; active_version_created_at?: string;
+  active_version_published_at?: string; version_count?: number; updated_at: string; knowledge_review?: string;
   knowledge_review_filename?: string; knowledge_review_updated_at?: string;
 };
 type Version = {
   id: string; version_number: number; status: string; job_status: string; source_sha256: string;
   builder_version?: string; build_warnings: string[]; build_imports: string[]; error_code?: string;
-  error_message?: string; built_at?: string; published_at?: string;
+  error_message?: string; created_at?: string; built_at?: string; published_at?: string;
 };
 type PublicExperiment = {
   slug: string; title: string; description: string; category: string; cover_path?: string;
@@ -25,6 +26,27 @@ const KnowledgeReviewContent = lazy(() => import("./KnowledgeReview"));
 
 const statusNames: Record<string, string> = { draft: "草稿", queued: "排队中", running: "构建中", building: "构建中", success: "构建成功", failed: "构建失败", published: "已发布", hidden: "已下架", archived: "已归档" };
 const versionName = (n: number) => `v${String(n).padStart(6, "0")}`;
+const formatDateTime = (value?: string) => value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "—";
+const formatBytes = (value: number) => value < 1024 ? `${value} B` : value < 1024 * 1024 ? `${(value / 1024).toFixed(1)} KiB` : `${(value / 1024 / 1024).toFixed(2)} MiB`;
+
+type BatchSummary = {
+  id: string; item_count: number; created_at: string; published_at?: string; created_by_email?: string;
+  success_count: number; failed_count: number; pending_count: number; missing_count: number;
+  status: "building" | "ready" | "failed" | "published";
+};
+type BatchItem = {
+  experiment_id: string; version_id?: string; slug: string; title: string; version_number?: number;
+  status?: string; job_status?: string; error_code?: string; error_message?: string; created_at?: string; built_at?: string; published_at?: string;
+};
+type BatchPreflightItem = {
+  index: number; filename: string; relativePath: string; size: number; sha256: string; status: string;
+  slug?: string; experimentId?: string; experimentTitle?: string; activeVersionNumber?: number;
+  existingVersionNumber?: number; candidates?: string[];
+};
+type CleanupCandidate = {
+  id: string; experiment_id: string; version_number: number; status: string; source_filename: string;
+  created_at: string; built_at?: string; slug: string; title: string; source_bytes: number; build_bytes: number; total_bytes: number;
+};
 
 function ErrorNotice({ error }: { error: unknown }) {
   if (!error) return null;
@@ -164,13 +186,121 @@ function Dashboard() {
   return <><PageHeader eyebrow="OVERVIEW" title="控制台"><Link className="button primary" to="/admin/experiments/new">＋ 新建实验</Link></PageHeader><div className="stat-grid"><article><span>实验总数</span><strong>{data.counts.reduce((sum, item) => sum + item.count, 0)}</strong><small>全部实验资产</small></article><article><span>已发布</span><strong>{count("published")}</strong><small>学生端可访问</small></article><article><span>草稿 / 归档</span><strong>{count("draft")} / {count("archived")}</strong><small>待处理内容</small></article><article className={data.buildFailed ? "warn" : ""}><span>构建失败</span><strong>{data.buildFailed}</strong><small>需要关注</small></article></div><div className="two-columns"><section className="panel"><div className="panel-heading"><h2>最近更新</h2><Link to="/admin/experiments">查看全部</Link></div>{data.recent.length ? <div className="simple-list">{data.recent.map((item) => <Link key={item.id} to={`/admin/experiments/${item.id}`}><span className="list-icon">🧫</span><span><strong>{item.title}</strong><small>{item.slug}</small></span><Status value={item.status} /></Link>)}</div> : <Empty>暂无实验</Empty>}</section><section className="panel"><div className="panel-heading"><h2>最近操作</h2><Link to="/admin/audit">审计日志</Link></div><div className="timeline">{data.logs.map((item) => <div key={item.id}><i /><span><strong>{item.action}</strong><small>{item.email ?? "系统"} · {new Date(item.created_at).toLocaleString("zh-CN")}</small></span></div>)}</div></section></div></>;
 }
 
+const batchStatusNames: Record<BatchSummary["status"], string> = { building: "构建中", ready: "可发布", failed: "有失败", published: "已发布" };
+const preflightStatusNames: Record<string, string> = {
+  ready: "可更新", unchanged: "与当前版本相同", existing_version: "历史版本已存在", unknown_slug: "无匹配实验",
+  invalid_name: "文件名不符合规则", ambiguous_slug: "Slug 有歧义", duplicate_slug: "目录中 Slug 重复",
+};
+
+async function fileSha256(file: File): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, "0")).join("");
+}
+
+function BatchUpdateModal({ batchId, onClose, onChanged }: { batchId?: string; onClose: () => void; onChanged: () => Promise<void> }) {
+  const [files, setFiles] = useState<File[]>([]);
+  const [preflight, setPreflight] = useState<BatchPreflightItem[]>();
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [batch, setBatch] = useState<BatchSummary>();
+  const [items, setItems] = useState<BatchItem[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>();
+
+  const loadBatch = async (id: string) => {
+    const result = await api<{ batch: BatchSummary; items: BatchItem[] }>(`/api/batch-updates/${id}`);
+    setBatch(result.batch); setItems(result.items);
+  };
+  useEffect(() => { if (batchId) void loadBatch(batchId).catch(setError); }, [batchId]);
+  useEffect(() => {
+    if (!batch || batch.status !== "building") return;
+    const timer = setInterval(() => void loadBatch(batch.id).catch(setError), 1800);
+    return () => clearInterval(timer);
+  }, [batch?.id, batch?.status]);
+
+  const chooseDirectory = async (event: ChangeEvent<HTMLInputElement>) => {
+    setError(undefined); setBatch(undefined); setItems([]);
+    const picked = [...(event.currentTarget.files ?? [])].filter((file) => file.name.toLowerCase().endsWith(".jsx"));
+    if (!picked.length) { setPreflight(undefined); setFiles([]); setError(new ApiClientError("BATCH_EMPTY", "所选目录及子目录中没有 JSX 文件", 400)); return; }
+    if (picked.length > BATCH_JSX_MAX_FILES) { setError(new ApiClientError("BATCH_TOO_MANY_FILES", `每批最多 ${BATCH_JSX_MAX_FILES} 个 JSX 文件`, 413)); return; }
+    if (picked.reduce((total, file) => total + file.size, 0) > BATCH_JSX_MAX_TOTAL_BYTES) { setError(new ApiClientError("BATCH_TOO_LARGE", "批量 JSX 总大小不能超过 100 MiB", 413)); return; }
+    setBusy(true);
+    try {
+      const descriptors = await Promise.all(picked.map(async (file) => ({
+        filename: file.name,
+        relativePath: (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name,
+        size: file.size,
+        sha256: await fileSha256(file),
+      })));
+      const result = await api<{ files: BatchPreflightItem[] }>("/api/batch-updates/preflight", { method: "POST", body: JSON.stringify({ files: descriptors }) });
+      setFiles(picked); setPreflight(result.files); setSelected(new Set(result.files.filter((item) => item.status === "ready").map((item) => item.index)));
+    } catch (reason) { setError(reason); }
+    finally { setBusy(false); }
+  };
+
+  const upload = async () => {
+    if (!preflight || !selected.size) return;
+    setBusy(true); setError(undefined);
+    try {
+      const body = new FormData();
+      [...selected].sort((a, b) => a - b).forEach((index) => body.append("jsx", files[index]!, files[index]!.name));
+      const result = await api<{ batchId: string }>("/api/batch-updates", { method: "POST", body });
+      setPreflight(undefined); setFiles([]); setSelected(new Set());
+      await loadBatch(result.batchId); await onChanged();
+    } catch (reason) { setError(reason); }
+    finally { setBusy(false); }
+  };
+
+  const publish = async () => {
+    if (!batch || batch.status !== "ready" || !window.confirm(`确定一次性发布本批次的 ${batch.item_count} 个实验吗？`)) return;
+    setBusy(true); setError(undefined);
+    try { await api(`/api/batch-updates/${batch.id}/publish`, { method: "POST" }); await loadBatch(batch.id); await onChanged(); }
+    catch (reason) { setError(reason); }
+    finally { setBusy(false); }
+  };
+
+  const toggle = (index: number) => setSelected((current) => { const next = new Set(current); if (next.has(index)) next.delete(index); else next.add(index); return next; });
+  return <div className="modal management-modal" role="presentation"><section className="management-modal-card" role="dialog" aria-modal="true" aria-label="批量更新 JSX"><header><div><p className="eyebrow">BATCH UPDATE</p><strong>批量更新 JSX</strong></div><button type="button" onClick={onClose} aria-label="关闭">×</button></header><div className="management-modal-body"><ErrorNotice error={error} />
+    {!batch && <section className="batch-picker"><label className="file-field">选择包含多个实验包的目录<input type="file" accept=".jsx,text/jsx" multiple {...({ webkitdirectory: "", directory: "" } as Record<string, string>)} onChange={(event) => void chooseDirectory(event)} disabled={busy} /><span>递归读取子目录；支持 &lt;slug&gt;-vsim.jsx 或 &lt;slug&gt;.jsx，最多 {BATCH_JSX_MAX_FILES} 个文件。</span></label>{busy && !preflight && <Loading />}</section>}
+    {preflight && <section><div className="batch-summary"><strong>预检完成：{preflight.filter((item) => item.status === "ready").length} 个可更新</strong><span>已选择 {selected.size} 个；相同内容和无法匹配的文件不会上传。</span></div><div className="table-wrap compact-table"><table><thead><tr><th>选择</th><th>相对路径</th><th>匹配实验</th><th>当前版本</th><th>结果</th></tr></thead><tbody>{preflight.map((item) => <tr key={`${item.index}-${item.relativePath}`}><td><input type="checkbox" checked={selected.has(item.index)} disabled={item.status !== "ready"} onChange={() => toggle(item.index)} /></td><td><strong>{item.filename}</strong><small>{item.relativePath}</small></td><td>{item.experimentTitle ? <><strong>{item.experimentTitle}</strong><small>{item.slug}</small></> : (item.candidates?.join(" / ") || "—")}</td><td>{item.activeVersionNumber ? versionName(item.activeVersionNumber) : "—"}</td><td><span className={`batch-result result-${item.status}`}>{preflightStatusNames[item.status] ?? item.status}{item.existingVersionNumber ? ` · ${versionName(item.existingVersionNumber)}` : ""}</span></td></tr>)}</tbody></table></div><div className="modal-actions"><button className="button" onClick={() => { setPreflight(undefined); setFiles([]); }} disabled={busy}>重新选择</button><button className="button primary" onClick={() => void upload()} disabled={busy || !selected.size}>{busy ? "上传中…" : `创建 ${selected.size} 个新版本`}</button></div></section>}
+    {batch && <section><div className="batch-summary"><div><strong>批次 {batch.id.slice(0, 8)}</strong><span>{formatDateTime(batch.created_at)} · {batch.created_by_email ?? "管理员"}</span></div><span className={`batch-status batch-${batch.status}`}>{batchStatusNames[batch.status]}</span></div><div className="batch-progress"><span>成功 {batch.success_count}/{batch.item_count}</span><span>失败 {batch.failed_count}</span><span>处理中 {batch.pending_count}</span></div><div className="table-wrap compact-table"><table><thead><tr><th>实验</th><th>新版本</th><th>构建状态</th><th>时间 / 错误</th></tr></thead><tbody>{items.map((item) => <tr key={item.experiment_id}><td><strong>{item.title}</strong><small>{item.slug}</small></td><td>{item.version_number ? versionName(item.version_number) : "已清理"}</td><td><Status value={item.status ?? "failed"} /></td><td>{item.error_message ? <span className="text-danger">{item.error_code}: {item.error_message}</span> : <small>上传 {formatDateTime(item.created_at)}<br />构建 {formatDateTime(item.built_at)}</small>}</td></tr>)}</tbody></table></div><div className="batch-safety-note">{batch.status === "building" ? "正在构建；关闭窗口不会中止任务，可从实验列表的最近批次重新打开。" : batch.status === "failed" ? "存在构建失败，本批次不能整体发布，线上版本未发生变化。" : batch.status === "ready" ? "全部构建成功。发布时会再次校验当前版本，并在一次数据库事务中整体切换。" : `已于 ${formatDateTime(batch.published_at)} 整体发布。`}</div><div className="modal-actions"><button className="button" onClick={onClose}>关闭</button>{batch.status === "ready" && <button className="button primary" disabled={busy} onClick={() => void publish()}>{busy ? "发布中…" : `一次性发布 ${batch.item_count} 个实验`}</button>}</div></section>}
+  </div></section></div>;
+}
+
+function CleanupVersionsModal({ onClose, onChanged }: { onClose: () => void; onChanged: () => Promise<void> }) {
+  const [candidates, setCandidates] = useState<CleanupCandidate[]>();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<unknown>();
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api<{ candidates: CleanupCandidate[] }>("/api/versions/cleanup-candidates").then((result) => { setCandidates(result.candidates); setSelected(new Set(result.candidates.filter((item) => item.status === "failed").map((item) => item.id))); }).catch(setError); }, []);
+  const selectedBytes = candidates?.filter((item) => selected.has(item.id)).reduce((total, item) => total + item.total_bytes, 0) ?? 0;
+  const remove = async () => {
+    if (!selected.size || !window.confirm(`确定删除 ${selected.size} 个从未发布的版本并释放约 ${formatBytes(selectedBytes)} 吗？此操作不可恢复。`)) return;
+    setBusy(true); setError(undefined);
+    try { await api("/api/versions/bulk-delete", { method: "POST", body: JSON.stringify({ versionIds: [...selected] }) }); await onChanged(); onClose(); }
+    catch (reason) { setError(reason); setBusy(false); }
+  };
+  return <div className="modal management-modal"><section className="management-modal-card" role="dialog" aria-modal="true" aria-label="清理未发布版本"><header><div><p className="eyebrow">SAFE CLEANUP</p><strong>批量清理未发布版本</strong></div><button onClick={onClose} aria-label="关闭">×</button></header><div className="management-modal-body"><ErrorNotice error={error} /><div className="batch-safety-note">只列出非当前、从未发布且不在构建中的版本。已发布历史和当前版本不会出现在这里。</div>{!candidates ? <Loading /> : candidates.length === 0 ? <Empty>没有可安全清理的版本</Empty> : <><div className="batch-summary"><span>{candidates.length} 个安全候选，已选择 {selected.size} 个，预计释放 {formatBytes(selectedBytes)}</span><div><button className="text-link" onClick={() => setSelected(new Set(candidates.map((item) => item.id)))}>全选</button><button className="text-link" onClick={() => setSelected(new Set())}>清空</button></div></div><div className="table-wrap compact-table"><table><thead><tr><th>选择</th><th>实验</th><th>版本</th><th>状态</th><th>上传时间</th><th>占用</th></tr></thead><tbody>{candidates.map((item) => <tr key={item.id}><td><input type="checkbox" checked={selected.has(item.id)} onChange={() => setSelected((current) => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })} /></td><td><strong>{item.title}</strong><small>{item.slug}</small></td><td>{versionName(item.version_number)}</td><td><Status value={item.status} /></td><td>{formatDateTime(item.created_at)}</td><td>{formatBytes(item.total_bytes)}</td></tr>)}</tbody></table></div></>}<div className="modal-actions"><button className="button" onClick={onClose}>取消</button><button className="button danger-button" disabled={busy || !selected.size} onClick={() => void remove()}>{busy ? "清理中…" : `删除 ${selected.size} 个安全版本`}</button></div></div></section></div>;
+}
+
 function Experiments() {
-  const [items, setItems] = useState<Experiment[]>(); const [filter, setFilter] = useState("all"); const [dirty, setDirty] = useState(false); const [saving, setSaving] = useState(false); const [error, setError] = useState<unknown>();
-  useEffect(() => { api<{ experiments: Experiment[] }>("/api/experiments").then((result) => setItems(result.experiments)).catch(setError); }, []);
+  const [items, setItems] = useState<Experiment[]>(); const [batches, setBatches] = useState<BatchSummary[]>([]); const [filter, setFilter] = useState("all"); const [dirty, setDirty] = useState(false); const [saving, setSaving] = useState(false); const [error, setError] = useState<unknown>();
+  const [batchModal, setBatchModal] = useState<{ open: boolean; id?: string }>({ open: false }); const [cleanupOpen, setCleanupOpen] = useState(false);
+  const load = async () => {
+    const [experimentResult, batchResult] = await Promise.all([
+      api<{ experiments: Experiment[] }>("/api/experiments"),
+      api<{ batches: BatchSummary[] }>("/api/batch-updates?limit=8"),
+    ]);
+    setItems(experimentResult.experiments); setBatches(batchResult.batches);
+  };
+  useEffect(() => { void load().catch(setError); }, []);
   const shown = useMemo(() => items?.filter((item) => filter === "all" || item.status === filter), [items, filter]);
   const move = (id: string, offset: number) => { if (!items) return; const index = items.findIndex((item) => item.id === id); const target = index + offset; if (index < 0 || target < 0 || target >= items.length) return; const next = [...items]; const [moved] = next.splice(index, 1); if (!moved) return; next.splice(target, 0, moved); setItems(next); setDirty(true); };
   const saveOrder = async () => { if (!items) return; setSaving(true); setError(undefined); try { await api("/api/experiments/order", { method: "PUT", body: JSON.stringify({ experimentIds: items.map((item) => item.id) }) }); setDirty(false); } catch (reason) { setError(reason); } finally { setSaving(false); } };
-  return <><PageHeader eyebrow="EXPERIMENTS" title="实验管理"><div className="header-actions"><button className="button" disabled={!dirty || saving || filter !== "all"} onClick={() => void saveOrder()}>{saving ? "保存中…" : "保存教学顺序"}</button><Link className="button primary" to="/admin/experiments/new">＋ 新建实验</Link></div></PageHeader><ErrorNotice error={error} /><div className="order-tip">在“全部”列表中使用上下按钮排列教学顺序；学生首页按此顺序展示已发布实验。</div><div className="filters">{[["all", "全部"], ["published", "已发布"], ["draft", "草稿"], ["hidden", "已下架"], ["archived", "已归档"]].map(([value, label]) => <button className={filter === value ? "active" : ""} onClick={() => setFilter(value!)} key={value}>{label}</button>)}</div>{!shown ? <Loading /> : shown.length === 0 ? <Empty>没有符合条件的实验</Empty> : <div className="table-wrap"><table><thead><tr><th>教学顺序</th><th>实验</th><th>分类</th><th>状态</th><th>当前版本</th><th>版本数</th><th>更新时间</th><th /></tr></thead><tbody>{shown.map((item) => { const index = items?.findIndex((candidate) => candidate.id === item.id) ?? -1; return <tr key={item.id}><td><div className="order-controls"><strong>{index + 1}</strong><button disabled={filter !== "all" || index <= 0} title={`上移 ${item.title}`} onClick={() => move(item.id, -1)}>↑</button><button disabled={filter !== "all" || !items || index >= items.length - 1} title={`下移 ${item.title}`} onClick={() => move(item.id, 1)}>↓</button></div></td><td><strong>{item.title}</strong><small>{item.slug}</small></td><td>{item.category || "—"}</td><td><Status value={item.status} /></td><td>{item.active_version_number ? versionName(item.active_version_number) : "—"}</td><td>{item.version_count}</td><td>{new Date(item.updated_at).toLocaleDateString("zh-CN")}</td><td><Link className="text-link" to={`/admin/experiments/${item.id}`}>管理 →</Link></td></tr>; })}</tbody></table></div>}</>;
+  return <><PageHeader eyebrow="EXPERIMENTS" title="实验管理"><div className="header-actions"><button className="button" onClick={() => setCleanupOpen(true)}>清理未发布版本</button><button className="button" onClick={() => setBatchModal({ open: true })}>批量更新 JSX</button><button className="button" disabled={!dirty || saving || filter !== "all"} onClick={() => void saveOrder()}>{saving ? "保存中…" : "保存教学顺序"}</button><Link className="button primary" to="/admin/experiments/new">＋ 新建实验</Link></div></PageHeader><ErrorNotice error={error} /><div className="order-tip">在“全部”列表中使用上下按钮排列教学顺序；批量更新会先预检并构建全部版本，确认后才整体发布。</div><div className="filters">{[["all", "全部"], ["published", "已发布"], ["draft", "草稿"], ["hidden", "已下架"], ["archived", "已归档"]].map(([value, label]) => <button className={filter === value ? "active" : ""} onClick={() => setFilter(value!)} key={value}>{label}</button>)}</div>{!shown ? <Loading /> : shown.length === 0 ? <Empty>没有符合条件的实验</Empty> : <div className="table-wrap"><table><thead><tr><th>教学顺序</th><th>实验</th><th>分类</th><th>状态</th><th>当前版本</th><th>版本数</th><th>精确时间</th><th /></tr></thead><tbody>{shown.map((item) => { const index = items?.findIndex((candidate) => candidate.id === item.id) ?? -1; return <tr key={item.id}><td><div className="order-controls"><strong>{index + 1}</strong><button disabled={filter !== "all" || index <= 0} title={`上移 ${item.title}`} onClick={() => move(item.id, -1)}>↑</button><button disabled={filter !== "all" || !items || index >= items.length - 1} title={`下移 ${item.title}`} onClick={() => move(item.id, 1)}>↓</button></div></td><td><strong>{item.title}</strong><small>{item.slug}</small></td><td>{item.category || "—"}</td><td><Status value={item.status} /></td><td>{item.active_version_number ? versionName(item.active_version_number) : "—"}</td><td>{item.version_count}</td><td><div className="time-cell"><span>版本首发 {formatDateTime(item.active_version_published_at)}</span><small>模块更新 {formatDateTime(item.updated_at)}</small></div></td><td><Link className="text-link" to={`/admin/experiments/${item.id}`}>管理 →</Link></td></tr>; })}</tbody></table></div>}
+    {batches.length > 0 && <section className="panel batch-history"><div className="panel-heading"><div><h2>最近批量更新</h2><p>批次记录保存在服务器，关闭或刷新页面不会丢失构建进度。</p></div></div><div className="batch-history-list">{batches.map((batch) => <button key={batch.id} onClick={() => setBatchModal({ open: true, id: batch.id })}><span><strong>{batch.id.slice(0, 8)}</strong><small>{formatDateTime(batch.created_at)} · {batch.item_count} 个实验</small></span><span className={`batch-status batch-${batch.status}`}>{batchStatusNames[batch.status]}</span></button>)}</div></section>}
+    {batchModal.open && <BatchUpdateModal {...(batchModal.id ? { batchId: batchModal.id } : {})} onClose={() => setBatchModal({ open: false })} onChanged={load} />}
+    {cleanupOpen && <CleanupVersionsModal onClose={() => setCleanupOpen(false)} onChanged={load} />}
+  </>;
 }
 
 function NewExperiment() {
@@ -199,7 +329,7 @@ function ExperimentDetail() {
     <div className="admin-detail-grid"><form className="panel edit-form compact-form" onSubmit={updateInfo}><div className="panel-heading"><div><h2>基本信息与介绍页</h2><p>修改后将同步到学生首页和实验介绍页。</p></div></div><div className="form-grid"><label>实验名称<input name="title" required maxLength={200} defaultValue={item.title} /></label><label>Slug<input name="slug" required disabled={item.slug_locked} defaultValue={item.slug} />{item.slug_locked && <small>首次发布后不可修改</small>}</label><label>分类<input name="category" maxLength={100} defaultValue={item.category} /></label><label className="wide">实验简介<textarea name="description" rows={8} maxLength={4000} defaultValue={item.description} /></label></div><div className="form-actions"><button className="button primary">保存基本信息</button></div></form>
       <section className="panel cover-manager"><div className="panel-heading"><div><h2>实验封面</h2><p>不设置图片时自动使用固定主题色块。</p></div></div><ExperimentCover experiment={item} /><form onSubmit={updateCover}><input name="cover" type="file" accept="image/png,image/jpeg,image/webp" required /><button className="button">更换封面</button></form>{item.cover_path && <button className="text-danger" onClick={() => void action(`/api/experiments/${id}/cover`, "DELETE")}>删除图片并使用自动背景</button>}</section></div>
     <section className="panel knowledge-manager"><div className="panel-heading"><div><h2>知识点复习</h2><p>上传实验包中的 Markdown，学生可在实验介绍页悬浮阅读。</p></div>{item.knowledge_review && <span className="knowledge-ready">已配置</span>}</div>{item.knowledge_review ? <div className="knowledge-file"><div><strong>{item.knowledge_review_filename}</strong><small>{item.knowledge_review.length.toLocaleString("zh-CN")} 字符 · 更新于 {item.knowledge_review_updated_at ? new Date(item.knowledge_review_updated_at).toLocaleString("zh-CN") : "—"}</small></div><button className="text-danger" onClick={() => void removeKnowledgeReview()}>删除知识点</button></div> : <p className="knowledge-empty">暂未配置，学生详情页不会显示“知识点复习”按钮。</p>}<form onSubmit={updateKnowledgeReview}><input name="knowledge" type="file" accept=".md,text/markdown,text/plain" required /><button className="button">{item.knowledge_review ? "替换知识点" : "上传知识点"}</button></form></section>
-    <section className="panel"><div className="panel-heading"><div><h2>版本历史</h2><p>每个版本发布后保持不可变，可随时切换生效版本。</p></div><form className="inline-upload" onSubmit={upload}><input name="jsx" type="file" accept=".jsx" required /><button className="button primary">上传新版</button></form></div>{versions.length === 0 ? <Empty>暂无版本</Empty> : <div className="version-list">{versions.map((version) => { const canDelete = !version.published_at && item.active_version_id !== version.id && !["queued", "building", "running"].includes(version.status) && !["queued", "running"].includes(version.job_status); return <article key={version.id} className={item.active_version_id === version.id ? "active-version" : ""}><div className="version-head"><div><strong>{versionName(version.version_number)}</strong>{item.active_version_id === version.id && <span className="current">当前</span>}{version.published_at && <span className="published-once">已发布记录</span>}</div><Status value={version.status} /></div><dl><div><dt>Source SHA256</dt><dd>{version.source_sha256}</dd></div><div><dt>Builder</dt><dd>{version.builder_version ?? "等待构建"}</dd></div><div><dt>Imports</dt><dd>{version.build_imports?.join(", ") || "—"}</dd></div></dl>{version.build_warnings?.map((warning) => <p className="warning" key={warning}>⚠ {warning}</p>)}{version.error_message && <div className="notice error"><strong>{version.error_code}</strong><span>{version.error_message}</span></div>}<div className="version-actions">{canDelete && <button className="text-danger" onClick={() => void removeVersion(version)}>删除未发布版本</button>}{version.status === "success" && <><button onClick={() => setPreview(version)}>预览</button><button className="primary-small" onClick={() => void action(`/api/versions/${version.id}/publish`)}>{item.active_version_id ? "发布 / 回滚至此版本" : "发布"}</button></>}</div></article>; })}</div>}</section>
+    <section className="panel"><div className="panel-heading"><div><h2>版本历史</h2><p>每个版本发布后保持不可变，可随时切换生效版本。</p></div><form className="inline-upload" onSubmit={upload}><input name="jsx" type="file" accept=".jsx" required /><button className="button primary">上传新版</button></form></div>{versions.length === 0 ? <Empty>暂无版本</Empty> : <div className="version-list">{versions.map((version) => { const canDelete = !version.published_at && item.active_version_id !== version.id && !["queued", "building", "running"].includes(version.status) && !["queued", "running"].includes(version.job_status); return <article key={version.id} className={item.active_version_id === version.id ? "active-version" : ""}><div className="version-head"><div><strong>{versionName(version.version_number)}</strong>{item.active_version_id === version.id && <span className="current">当前</span>}{version.published_at && <span className="published-once">已发布记录</span>}</div><Status value={version.status} /></div><dl><div><dt>Source SHA256</dt><dd>{version.source_sha256}</dd></div><div><dt>Builder</dt><dd>{version.builder_version ?? "等待构建"}</dd></div><div><dt>Imports</dt><dd>{version.build_imports?.join(", ") || "—"}</dd></div><div><dt>精确时间</dt><dd className="version-times">上传 {formatDateTime(version.created_at)}<br />构建 {formatDateTime(version.built_at)}<br />发布 {formatDateTime(version.published_at)}</dd></div></dl>{version.build_warnings?.map((warning) => <p className="warning" key={warning}>⚠ {warning}</p>)}{version.error_message && <div className="notice error"><strong>{version.error_code}</strong><span>{version.error_message}</span></div>}<div className="version-actions">{canDelete && <button className="text-danger" onClick={() => void removeVersion(version)}>删除未发布版本</button>}{version.status === "success" && <><button onClick={() => setPreview(version)}>预览</button><button className="primary-small" onClick={() => void action(`/api/versions/${version.id}/publish`)}>{item.active_version_id ? "发布 / 回滚至此版本" : "发布"}</button></>}</div></article>; })}</div>}</section>
     {item.status === "archived" && <section className="panel danger-zone"><div><p className="eyebrow">DANGER ZONE</p><h2>永久删除实验及全部文件</h2><p>将同时删除所有 JSX 源码、构建产物、发布目录、封面和数据库记录，此操作不可恢复。</p></div><div><label>输入 Slug <code>{item.slug}</code> 确认<input value={deleteSlug} onChange={(event) => setDeleteSlug(event.target.value)} /></label><button disabled={deleteSlug !== item.slug} onClick={() => void removeExperiment()}>永久删除</button></div></section>}
     {preview && <div className="modal"><div className="modal-card"><header><strong>预览 {versionName(preview.version_number)}</strong><button onClick={() => setPreview(undefined)}>×</button></header><iframe title="管理员预览" src={`/preview/${preview.id}/index.html`} sandbox="allow-scripts allow-forms" referrerPolicy="no-referrer" /></div></div>}</>;
 }

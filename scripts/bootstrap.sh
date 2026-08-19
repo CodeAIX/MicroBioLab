@@ -9,7 +9,7 @@ usage() {
 用法：sudo bash bootstrap.sh <vX.Y.Z> [主平台域名] [实验站域名] [管理员邮箱]
 
 示例：
-  sudo bash bootstrap.sh v1.3.0 lab.example.com exp.lab.example.com admin@example.com
+  sudo bash bootstrap.sh v1.4.0 lab.example.com exp.lab.example.com admin@example.com
 
 需要预先安装 Docker Engine 和 Docker Compose Plugin。
 EOF

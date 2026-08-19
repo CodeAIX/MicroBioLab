@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import path from "node:path";
 
 test("published sample opens inside the sandboxed experiment frame", async ({ page }) => {
   await page.goto("/");
@@ -49,12 +50,51 @@ test("administrator can upload a new version without a stale form error", async 
   await page.getByRole("button", { name: "上传新版", exact: true }).click();
 
   await expect(page.getByText("Cannot read properties of null")).toHaveCount(0);
-  await expect(page.getByText("v000002", { exact: true })).toBeVisible();
+  await expect(page.getByText("v000003", { exact: true })).toBeVisible();
   await expect(page.locator('.inline-upload input[type="file"]')).toHaveValue("");
 
   page.once("dialog", (dialog) => void dialog.accept());
   await page.getByRole("button", { name: "删除未发布版本" }).click({ timeout: 60_000 });
-  await expect(page.getByText("v000002", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("v000003", { exact: true })).toHaveCount(0);
+});
+
+test("administrator can preflight and atomically publish a JSX directory", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("邮箱").fill("admin@example.com");
+  await page.getByLabel("密码").fill("IntegrationTest-Password-2026");
+  await page.getByRole("button", { name: "登录" }).click();
+  await page.getByRole("link", { name: "▤ 实验管理", exact: true }).click();
+  await page.getByRole("button", { name: "批量更新 JSX", exact: true }).click();
+
+  await page.getByLabel("选择包含多个实验包的目录").setInputFiles(path.resolve("tests/fixtures/batch-next"));
+  await expect(page.getByText("预检完成：2 个可更新", { exact: true })).toBeVisible();
+  await expect(page.getByText("无匹配实验", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "创建 2 个新版本", exact: true }).click();
+  await expect(page.getByText("可发布", { exact: true })).toBeVisible({ timeout: 90_000 });
+
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("button", { name: "一次性发布 2 个实验", exact: true }).click();
+  await expect(page.getByText("已发布", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
+  await expect(page.getByRole("row").filter({ hasText: "肠道杆菌的分离培养与生化鉴定" }).getByText("v000003", { exact: true })).toBeVisible();
+});
+
+test("administrator can bulk-clean only safe unpublished versions", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("邮箱").fill("admin@example.com");
+  await page.getByLabel("密码").fill("IntegrationTest-Password-2026");
+  await page.getByRole("button", { name: "登录" }).click();
+  await page.getByRole("link", { name: "▤ 实验管理", exact: true }).click();
+  await page.getByRole("row").filter({ hasText: "肠道杆菌的分离培养与生化鉴定" }).getByRole("link", { name: "管理 →", exact: true }).click();
+  await page.locator('.inline-upload input[type="file"]').setInputFiles("samples/enterobacteria/App.jsx");
+  await page.getByRole("button", { name: "上传新版", exact: true }).click();
+  await expect(page.getByText("v000004", { exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "← 返回列表", exact: true }).click();
+  await page.getByRole("button", { name: "清理未发布版本", exact: true }).click();
+  await page.getByRole("button", { name: "全选", exact: true }).click();
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("button", { name: /删除 \d+ 个安全版本/ }).click({ timeout: 90_000 });
+  await expect(page.getByRole("heading", { name: "实验管理" })).toBeVisible();
 });
 
 test("administrator can save teaching order and permanently delete an archived experiment", async ({ page }) => {

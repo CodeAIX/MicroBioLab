@@ -26,13 +26,14 @@ HELP_OUTPUT="$($TEST_ROOT/deploy/scripts/manage.sh help)"
 [[ "$HELP_OUTPUT" == *"MicroBio Lab 维护命令"* ]]
 [[ "$HELP_OUTPUT" == *"mbl uninstall"* ]]
 [[ "$HELP_OUTPUT" == *"mbl purge"* ]]
+[[ "$HELP_OUTPUT" == *"mbl storage"* ]]
 
 BOOTSTRAP_HELP="$($REPO_DIR/scripts/bootstrap.sh --help)"
 [[ "$BOOTSTRAP_HELP" == *"sudo bash bootstrap.sh"* ]]
 
 VERSION_OUTPUT="$($TEST_ROOT/deploy/scripts/manage.sh version)"
-[[ "$VERSION_OUTPUT" == *"平台版本：v1.3.0"* ]]
-[[ "$VERSION_OUTPUT" == *"Builder： v1.3.0"* ]]
+[[ "$VERSION_OUTPUT" == *"平台版本：v1.4.0"* ]]
+[[ "$VERSION_OUTPUT" == *"Builder： v1.4.0"* ]]
 
 "$TEST_ROOT/deploy/scripts/manage.sh" status
 [[ "$(tail -n1 "$DOCKER_LOG")" == "compose ps" ]]
