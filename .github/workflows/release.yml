@@ -75,7 +75,7 @@ jobs:
         run: |
           mkdir release-assets
           cp compose.yaml .env.example README-VPS.md CHANGELOG.md HANDOFF.md 构建方案.md release-assets/
-          cp -R infra scripts docs release-assets/
+          cp -R infra scripts release-assets/
           tar -C release-assets -czf "microbio-lab-${GITHUB_REF_NAME}.tar.gz" .
           sha256sum "microbio-lab-${GITHUB_REF_NAME}.tar.gz" > SHA256SUMS
       - name: Create GitHub Release

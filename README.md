@@ -2,7 +2,7 @@
 
 可部署到普通 Linux VPS 的医学微生物学虚拟仿真实验平台，用于安全上传、检查、构建、预览、发布和版本化管理单文件 React JSX 实验，并为每个实验配置 Markdown 知识点复习。平台软件与实验资产完全解耦；发布后的 `v000001` 等目录保持不可变，回滚只切换数据库中的生效版本。
 
-当前稳定版：[`v1.1.2`](https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.1.2)
+当前稳定版：[`v1.2.0`](https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.2.0)
 
 主要能力：
 
@@ -17,8 +17,8 @@
 ## 快速部署
 
 ```bash
-docker pull ghcr.io/codeaix/microbio-lab-app:v1.1.2
-docker pull ghcr.io/codeaix/microbio-lab-builder:v1.1.2
+docker pull ghcr.io/codeaix/microbio-lab-app:v1.2.0
+docker pull ghcr.io/codeaix/microbio-lab-builder:v1.2.0
 ```
 
 镜像只负责 App/Builder，完整部署还需要仓库中的 `compose.yaml`、`.env`、PostgreSQL 和实验静态站。请按 [VPS 部署与运维](README-VPS.md) 完成安装，不要直接手写 `docker run`。
@@ -140,17 +140,17 @@ docker compose exec app node dist/cli/disable-admin.js --email admin@example.com
 推送 `v*` 标签后，`release.yml` 在完整 CI 通过后发布 amd64/arm64 镜像：
 
 ```text
-ghcr.io/<owner>/microbio-lab-app:v1.1.2
-ghcr.io/<owner>/microbio-lab-builder:v1.1.2
+ghcr.io/<owner>/microbio-lab-app:v1.2.0
+ghcr.io/<owner>/microbio-lab-builder:v1.2.0
 ```
 
-同时生成 `1.1`、`1`、`sha-*`，稳定版本更新 `latest`，并创建带 Compose、环境样例、基础设施、脚本和校验和的 GitHub Release。仓库不保存 PAT，Actions 使用最小权限 `GITHUB_TOKEN`。
+同时生成 `1.2`、`1`、`sha-*`，稳定版本更新 `latest`，并创建带 Compose、环境样例、基础设施、脚本和校验和的 GitHub Release。仓库不保存 PAT，Actions 使用最小权限 `GITHUB_TOKEN`。
 
 两个 GHCR Package 均为公开镜像，可匿名拉取：
 
 ```bash
-docker pull ghcr.io/codeaix/microbio-lab-app:v1.1.2
-docker pull ghcr.io/codeaix/microbio-lab-builder:v1.1.2
+docker pull ghcr.io/codeaix/microbio-lab-app:v1.2.0
+docker pull ghcr.io/codeaix/microbio-lab-builder:v1.2.0
 ```
 
 ## VPS 运维
@@ -160,7 +160,7 @@ docker pull ghcr.io/codeaix/microbio-lab-builder:v1.1.2
 ```bash
 ./scripts/healthcheck.sh
 ./scripts/backup.sh
-./scripts/upgrade.sh v1.1.2
+./scripts/upgrade.sh v1.2.0
 ./scripts/rollback.sh v1.1.0
 ./scripts/restore.sh /srv/microbio-lab/backups/2026-08-16_120000
 ./scripts/uninstall.sh

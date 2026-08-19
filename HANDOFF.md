@@ -7,18 +7,18 @@
 - 仓库：`https://github.com/CodeAIX/MicroBioLab`
 - 可见性：Public
 - 默认分支：`main`
-- 当前发布：`v1.1.2`
-- 发布源码提交：`46b5260d7755bd34a78e2fceb4b46571f8d1fc92`
-- GitHub Release：`https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.1.2`
-- 主镜像：`ghcr.io/codeaix/microbio-lab-app:v1.1.2`
-- Builder 镜像：`ghcr.io/codeaix/microbio-lab-builder:v1.1.2`
+- 当前发布：`v1.2.0`
+- 发布源码提交：以不可变 `v1.2.0` tag 为准
+- GitHub Release：`https://github.com/CodeAIX/MicroBioLab/releases/tag/v1.2.0`
+- 主镜像：`ghcr.io/codeaix/microbio-lab-app:v1.2.0`
+- Builder 镜像：`ghcr.io/codeaix/microbio-lab-builder:v1.2.0`
 - 镜像架构：`linux/amd64`、`linux/arm64`
 - 许可证：MIT
 - Node.js：24+
 - PostgreSQL：17
 - 生产部署：Docker Compose + Cloudflare Tunnel，无宿主机反向代理
 
-v1.1.2 已验证的发布状态：
+v1.1.2 已验证的历史发布状态：
 
 ```text
 main CI：    https://github.com/CodeAIX/MicroBioLab/actions/runs/31952285126（success）
@@ -29,7 +29,7 @@ Builder：    sha256:68b3ac23732c797ac9512e27ff9c87f8bcac9d9e5337a9159d38dfe737f
 
 两个镜像均已用匿名 Registry 请求验证为 HTTP 200，且 manifest 同时包含 `linux/amd64` 和 `linux/arm64`。Release 不是 draft/prerelease。
 
-当前工作区在 `v1.1.2` 基础上有尚未发布的知识点复习优化：数据库迁移 `003_knowledge_reviews.sql`、管理端 Markdown 上传/替换/删除、公共按需读取 API、学生详情页悬浮阅读与对应测试。正式发布前需要确定新版本号，并按第 9 节完整执行 CI 和发布流程。
+v1.2.0 增加知识点复习：数据库迁移 `003_knowledge_reviews.sql`、管理端 Markdown 上传/替换/删除、公共按需读取 API、学生详情页悬浮阅读与对应测试。功能提交的 main CI `32202196743` 已完整通过；Release 状态和镜像 digest 仍须在标签工作流完成后核验并回填。
 
 业务域名：
 
@@ -62,7 +62,7 @@ OpenSSL 3.0.13
 数据目录：/srv/microbio-lab
 ```
 
-最后一次已知健康检查中四个服务均正常。截至 v1.1.2 发布完成，用户尚未提供 VPS 升级到 v1.1.2 后的输出，因此不能假设生产环境已经升级；新会话应先让用户执行：
+最后一次已知健康检查中四个服务均正常。用户尚未提供 VPS 升级到 v1.2.0 后的输出，因此不能假设生产环境已经升级；新会话应先让用户执行：
 
 ```bash
 cd /opt/microbio-lab
@@ -235,7 +235,7 @@ GitHub CI 成功标准：
 2. 本地执行全部非 Docker 检查；
 3. 提交并推送 `main`；
 4. 等待 `main` CI 全绿；
-5. 使用新的版本号创建 annotated tag，例如 `NEXT_VERSION="v1.1.3"` 后执行 `git tag -a "$NEXT_VERSION" -m "MicroBio Lab $NEXT_VERSION"`；
+5. 使用新的版本号创建 annotated tag，例如 `NEXT_VERSION="v1.2.0"` 后执行 `git tag -a "$NEXT_VERSION" -m "MicroBio Lab $NEXT_VERSION"`；
 6. 推送标签，等待 Release 工作流；
 7. 验证 GitHub Release 不是 draft/prerelease；
 8. 使用未登录请求验证两个 GHCR manifest 返回 HTTP 200；
@@ -266,6 +266,7 @@ v1.1.2 Release 资产 `microbio-lab-v1.1.2.tar.gz` 的 SHA256 为 `be35549fee791
 - `v1.1.0`：教学排序、介绍页、二维码、无封面背景和删除管理；
 - `v1.1.1`：运维脚本、完整备份、离线方案和维护交接。
 - `v1.1.2`：JSX 上传上限提高到 10 MiB；本地 v1.1.1 离线包转为只读历史备份。
+- `v1.2.0`：实验级 Markdown 知识点复习、管理端维护、学生详情页悬浮阅读与安全按需渲染。
 
 ## 12. 凭据与外部状态
 
